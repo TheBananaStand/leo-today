@@ -136,6 +136,15 @@ def tool(name, args, token):
     except Exception as e:  # noqa: BLE001
         raise Gap(f"`{name}`: {type(e).__name__}") from None
     if out.get("is_error"):
+        body = str(out.get("output") or "")
+        # The tool's own prose is the discriminator, and it is worth keeping:
+        # a house that is switched off is not a page that is broken.
+        if "error sending request" in body:
+            raise Gap("Home Assistant isn't answering — the box it runs on looks to be off")
+        if "error decoding response body" in body:
+            raise Gap("Home Assistant refused the credential — its token may have expired")
+        if body.startswith("Home Assistant error"):
+            raise Gap("Home Assistant answered with an error")
         raise Gap(f"`{name}` answered with an error")
     return out.get("output") or ""
 
@@ -444,177 +453,41 @@ def symbol_for(cond):
     return "cloud.sun"
 
 
-HOUSE_WATCH = (
-    ("lock", "unlocked", "lock.open", "red", "{name} is unlocked"),
-    ("binary_sensor", "open", "door.left.hand.open", "amber", "{name} is open"),
-    ("cover", "open", "door.garage.open", "amber", "{name} is open"),
-)
-
-
 def house(now, act):
-    """Only what is NOT right. A list of every device is a different page."""
-    text = tool("home_assistant", {"action": "get_entities"}, act)
-    out = []
-    for line in text.splitlines():
-        low = line.lower()
-        for domain, bad, icon, tint, shape in HOUSE_WATCH:
-            if domain in low and re.search(rf"\b{bad}\b", low):
-                name = re.split(r"[:=|]", line.strip())[0].strip()[:48] or domain
-                out.append({"id": f"h{len(out)}", "icon": icon, "tint": tint,
-                            "what": shape.format(name=name), "detail": ""})
-                break
-        if len(out) >= 4:
-            break
-    return out
+    """Only what is NOT right. A list of every device is a different page.
 
-
-
-# ---------------------------------------------------------------------------
-# The briefing
-#
-# The one part of this page a model writes, and it is NEVER in the request
-# path. A page you open eight times a day cannot wait on inference eight
-# times, and a briefing that is six minutes stale is worth more than one that
-# costs four seconds.
-#
-# So: the briefing is cached against a DIGEST of what it was written about.
-# On every load the digest is recomputed; if it matches, the cache is served
-# untouched and nothing is spent. If it differs, the STALE briefing is served
-# at once — labelled with its age — and a regeneration runs in the
-# background for the next load. The page is never blocked and never empty
-# once it has been written once.
-#
-# The digest is over what the briefing is ABOUT, not over the clock: ids and
-# their state. A minute passing is not news. A reminder being ticked is.
-# ---------------------------------------------------------------------------
-
-BRIEF_DIR = os.path.join(DATA, "brief")
-_regen = set()
-_regen_lock = threading.Lock()
-
-BRIEF_SYSTEM = """You write one person's daily briefing inside their own assistant.
-
-You are given everything their hub knows about today. Answer ONLY with JSON:
-
-{"headline": "...", "focus": {"what": "...", "why": "..."},
- "notes": [{"what": "...", "why": "..."}], "mood": "calm|busy|behind"}
-
-- headline: ONE sentence on the state of the day. Concrete. Name real things.
-  Not "you have a busy day" — "Three meetings before noon, then the afternoon
-  is yours."
-- focus: the single thing worth their attention today, and why it is that
-  one rather than another. Prefer something with a deadline, someone waiting,
-  or a consequence. If nothing deserves it, say so in `what` and leave `why`
-  empty.
-- notes: up to four things to KNOW or to be thinking about next — something
-  coming, something that has gone quiet, something that will become a problem.
-  Not a restatement of the lists; they can already see those.
-- mood: `behind` if things are overdue or someone is waiting, `busy` if the
-  day is full, `calm` otherwise.
-
-Write like a sharp colleague who read everything before you got in. Short
-sentences. No preamble, no "here is", no bullets inside a field. Never invent
-a fact that is not below; if something is unknown, leave it out.
-"""
-
-
-def brief_path(user):
-    os.makedirs(BRIEF_DIR, exist_ok=True)
-    safe = "".join(c for c in (user or "nobody") if c.isalnum() or c in "-_") or "nobody"
-    return os.path.join(BRIEF_DIR, f"{safe}.json")
-
-
-def digest_of(items, evs):
-    """What the briefing is ABOUT, as one string.
-
-    State, not time: a tick, an arrival or a departure changes it; a minute
-    passing does not.
+    The tool answers a pretty-printed JSON array of
+    {entity_id, state, available, friendly_name} — `available` is the field
+    to trust, not `state`: false means the reading was "unavailable",
+    "unknown" or empty, and rendering that as "off" would report a door as
+    shut because nobody could see it.
     """
-    parts = [f"{i['kind']}:{i['id']}:{i.get('late', '')}" for i in items]
-    parts += [f"e:{e['id']}:{e['at'].isoformat()}" for e in evs]
-    parts.append(datetime.now().strftime("%Y-%m-%d"))  # a new day is new news
-    return hashlib.sha1("|".join(sorted(parts)).encode()).hexdigest()[:16]
-
-
-def context_for(items, evs, now, extras):
-    """Everything the briefing is allowed to know, as plain lines."""
-    out = []
-    today = [e for e in evs if e["at"].date() == now.date()]
-    if today:
-        out.append("TODAY'S CALENDAR:")
-        for e in today:
-            mark = "(done)" if e["at"] + timedelta(minutes=e["mins"]) < now else ""
-            out.append(f"- {clock(e['at'])} {e['title']}"
-                       + (f" at {e['where']}" if e["where"] else "") + f" {mark}".rstrip())
-    later = [e for e in evs if e["at"].date() > now.date()]
-    if later:
-        out.append("\nTOMORROW:")
-        for e in later[:5]:
-            out.append(f"- {clock(e['at'])} {e['title']}")
-    by_kind = {}
-    for i in items:
-        by_kind.setdefault(i["kind"], []).append(i)
-    for kind, label in (("task", "DUE OR OVERDUE"), ("mail", "UNANSWERED MAIL"),
-                        ("note", "RAISED SINCE LAST NIGHT")):
-        rowsk = by_kind.get(kind) or []
-        if rowsk:
-            out.append(f"\n{label}:")
-            for i in rowsk[:12]:
-                out.append(f"- {i['text']}" + (f" ({i['when']})" if i.get("when") else ""))
-    for line in extras:
-        out.append(f"\n{line}")
-    out.append(f"\nIt is {now.strftime('%A %-d %B, %H:%M')}.")
-    return "\n".join(out)
-
-
-def write_brief(user, key, context):
-    """Ask for the briefing and file it. Runs OFF the request path."""
+    rows_json = tool("home_assistant", {"action": "get_entities"}, act)
     try:
-        answer = ask_claude(BRIEF_SYSTEM, [{"role": "user", "content": context}],
-                            work="periodic_check", max_tokens=600)
-        text = answer.strip()
-        if text.startswith("```"):
-            text = text.split("```")[1].lstrip("json").strip()
-        data = json.loads(text[text.index("{"):text.rindex("}") + 1])
-        if not isinstance(data.get("headline"), str):
-            raise ValueError("no headline")
-        data["at"] = datetime.now().isoformat(timespec="minutes")
-        with _regen_lock:
-            json.dump({"digest": key, "brief": data}, open(brief_path(user), "w"))
-    except Exception as e:  # noqa: BLE001 — a briefing that fails costs a block
-        print(f"today: briefing failed: {type(e).__name__}: {e}", flush=True)
-    finally:
-        with _regen_lock:
-            _regen.discard((user, key))
-
-
-def briefing(user, items, evs, now, extras):
-    """The cached briefing, and a regeneration if it is out of date."""
-    key = digest_of(items, evs)
-    try:
-        held = json.load(open(brief_path(user)))
+        ents = json.loads(rows_json)
     except Exception:  # noqa: BLE001
-        held = None
+        raise Gap("it answered something that was not the list of entities") from None
+    if not isinstance(ents, list):
+        raise Gap("it answered something that was not the list of entities")
 
-    if not held or held.get("digest") != key:
-        with _regen_lock:
-            if (user, key) not in _regen:
-                _regen.add((user, key))
-                threading.Thread(target=write_brief, daemon=True,
-                                 args=(user, key, context_for(items, evs, now, extras))).start()
-
-    if not held:
-        return None
-    d = dict(held["brief"])
-    stale = held.get("digest") != key
-    written = when(d.pop("at", None))
-    if written:
-        mins = int((now - written).total_seconds() // 60)
-        d["age"] = ("just now" if mins < 2 else
-                    f"{mins} min ago" if mins < 90 else
-                    f"{mins // 60}h ago" if mins < 24 * 60 else written.strftime("%a"))
-    d["stale"] = "1" if stale else ""
-    return d
+    out = []
+    for e in ents:
+        if not isinstance(e, dict) or not e.get("available"):
+            continue
+        eid = str(e.get("entity_id") or "")
+        state = str(e.get("state") or "").lower()
+        name = str(e.get("friendly_name") or eid.split(".")[-1].replace("_", " ")).strip()
+        if eid.startswith("lock.") and state == "unlocked":
+            out.append(("lock.open", "red", f"{name} is unlocked"))
+        elif eid.startswith("cover.") and state == "open":
+            out.append(("door.garage.open", "amber", f"{name} is open"))
+        elif eid.startswith("binary_sensor.") and state == "on" \
+                and re.search(r"door|window|gate", name, re.I):
+            out.append(("door.left.hand.open", "amber", f"{name} is open"))
+        if len(out) >= 5:
+            break
+    return [{"id": f"h{i}", "icon": ic, "tint": tn, "what": what, "detail": ""}
+            for i, (ic, tn, what) in enumerate(out)]
 
 
 # ---------------------------------------------------------------------------
