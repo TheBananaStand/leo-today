@@ -168,7 +168,7 @@ def when(ts):
 
 
 def clock(t):
-    return t.strftime("%-I:%M") if t else ""
+    return t.strftime("%H:%M") if t else ""
 
 
 def minutes(t):
@@ -186,7 +186,10 @@ def lead(start, now):
     if mins < 300:
         h, m = divmod(mins, 60)
         return f"In {h}h {m:02d}m" if m else f"In {h} hours"
-    return start.strftime("At %-I:%M")
+    if start.date() != now.date():
+        return start.strftime("Tomorrow %H:%M") if start.date() == (now + timedelta(days=1)).date() \
+            else start.strftime("%A %H:%M")
+    return start.strftime("At %H:%M")
 
 
 def short_when(t, now):
@@ -206,7 +209,7 @@ def short_when(t, now):
     if mins < 12 * 60:
         return f"{mins // 60}h"
     if t.date() == now.date():
-        return t.strftime("%-I:%M")
+        return t.strftime("%H:%M")
     if t.date() == (now + timedelta(days=1)).date():
         return "tomorrow"
     return t.strftime("%a")
@@ -240,12 +243,13 @@ def events(now, _act):
             continue
         end = when(e.get("end") or e.get("end_at") or e.get("ends_at"))
         mins = int((end - t).total_seconds() // 60) if end and end > t else 60
+        allday = mins >= 300 or (t.hour == 0 and t.minute == 0 and mins >= 180)
         cal = str(e.get("calendar") or e.get("calendar_name") or "")
         out.append({
             "id": str(e.get("id") or len(out)), "at": t, "mins": min(mins, 600),
             "title": str(e.get("title") or e.get("summary") or "Untitled"),
             "where": str(e.get("location") or "")[:60],
-            "tomorrow": t.date() > now.date(),
+            "tomorrow": t.date() > now.date(), "allday": "1" if allday else "",
             "tint": TINTS[hash(cal) % len(TINTS)] if cal else "blue",
         })
     out.sort(key=lambda r: r["at"])
@@ -298,7 +302,10 @@ def mail(now, act):
     out_text = tool("email", {"action": "list_inbox", "limit": 12}, act)
     out = []
     for line in out_text.splitlines():
-        m = MAIL.match(line.strip())
+        line = line.strip()
+        if not line or line[0] in '"{[}]' or line.endswith((",", "{", "[")) or ":" in line[:12]:
+            continue
+        m = MAIL.match(line)
         if not m:
             continue
         who, subj = m.group("who").strip(), m.group("subj").strip()
@@ -448,11 +455,12 @@ def build_threads(items, now):
 # ---------------------------------------------------------------------------
 
 def day_strip(evs, now):
-    today = [e for e in evs if not e["tomorrow"]]
+    today = [e for e in evs if not e["tomorrow"] and not e["allday"]]
     lo, hi = DAY_FROM, DAY_TO
     for e in today:
         lo = min(lo, minutes(e["at"]))
         hi = max(hi, minutes(e["at"]) + e["mins"])
+    lo, hi = max(0, lo), min(24 * 60, hi)
     blocks, cursor = [], lo
     for e in today:
         s, t = max(lo, minutes(e["at"])), 0
@@ -572,7 +580,8 @@ def payload(grant=None, user=""):
         if blocks:
             d["strip"], d["at"] = blocks, at
             d["strip_from"], d["strip_to"], d["strip_note"] = span["from"], span["to"], span["note"]
-        nxt = next((e for e in evs if e["at"] >= now), None) or evs[0]
+        timed = [e for e in evs if not e["allday"]]
+        nxt = next((e for e in timed if e["at"] >= now), None) or (timed or evs)[-1]
         d["now"] = {"lead": lead(nxt["at"], now), "time": clock(nxt["at"]),
                     "title": nxt["title"],
                     "where": " · ".join(x for x in (nxt["where"], f"{nxt['mins']}m") if x),
@@ -628,11 +637,13 @@ def payload(grant=None, user=""):
     return d
 
 
-def tight_note(today, i):
+def tight_note(today, i):  # noqa: D103
     """Back-to-back is a fact about the day worth drawing."""
     if i == 0:
         return ""
     prev = today[i - 1]
+    if prev.get("allday") or today[i].get("allday") or prev["at"].date() != today[i]["at"].date():
+        return ""
     gap = int((today[i]["at"] - (prev["at"] + timedelta(minutes=prev["mins"]))).total_seconds() // 60)
     if 0 <= gap <= 10:
         return f"Straight after {prev['title'][:28]} — {gap} min" if gap else \
