@@ -1,0 +1,142 @@
+{
+ "greeting": "Monday evening",
+ "date_line": "24 November \u00b7 week 48",
+ "weather": {
+  "symbol": "moon.stars",
+  "condition": "Clear",
+  "tint": "purple",
+  "temp": "4\u00b0",
+  "range": "4\u00b0 / 12\u00b0"
+ },
+ "arc": {
+  "start": "07:00",
+  "end": "19:00",
+  "done": "97",
+  "left": "3"
+ },
+ "now": {
+  "lead": "Tonight",
+  "time": "18:30",
+  "title": "Dinner with friends",
+  "where": "Osteria \u00b7 1.1 mi",
+  "who": "2 people",
+  "join": "",
+  "faces": [
+   {
+    "id": "a",
+    "initials": "SR",
+    "tint": "purple"
+   },
+   {
+    "id": "b",
+    "initials": "JT",
+    "tint": "teal"
+   }
+  ]
+ },
+ "rail_note": "all done",
+ "rail": [
+  {
+   "id": "5",
+   "time": "18:30",
+   "title": "Dinner with friends",
+   "where": "Osteria",
+   "len": "",
+   "tint": "orange",
+   "live": "",
+   "done": "",
+   "free": "",
+   "last": "1",
+   "leave": "Leave 18:05 \u00b7 14 min drive",
+   "faces": []
+  }
+ ],
+ "tomorrow": {
+  "time": "8:00",
+  "title": "Flight to Austin",
+  "more": "+3 more"
+ },
+ "progress": {
+  "done": "9",
+  "left": "2",
+  "label": "9 done today"
+ },
+ "tasks_note": "2 open",
+ "tasks": [
+  {
+   "id": "t1",
+   "title": "Renew the passport \u2014 the Austin trip needs it",
+   "due": "4 days late",
+   "late": "1",
+   "done": ""
+  },
+  {
+   "id": "t2",
+   "title": "Pack",
+   "due": "Tonight",
+   "late": "",
+   "done": ""
+  }
+ ],
+ "house": [
+  {
+   "id": "h3",
+   "icon": "trash",
+   "tint": "teal",
+   "what": "Bins go out tonight",
+   "detail": "Recycling week. Collection is 6:40.",
+   "when": ""
+  }
+ ],
+ "notes": [
+  {
+   "id": "n1",
+   "icon": "airplane",
+   "tint": "blue",
+   "title": "Austin flight is on time",
+   "body": "Gate C14. Check-in opens at 05:00.",
+   "when": "17:20"
+  }
+ ],
+ "suggestions": [
+  {
+   "id": "s1",
+   "text": "What do I need for Austin?"
+  },
+  {
+   "id": "s2",
+   "text": "Set an alarm for 5:30"
+  }
+ ],
+ "keys": [
+  {
+   "id": "k1",
+   "key": "j k",
+   "does": "move through the day"
+  },
+  {
+   "id": "k2",
+   "key": "e",
+   "does": "tick off"
+  },
+  {
+   "id": "k3",
+   "key": "r",
+   "does": "refresh"
+  },
+  {
+   "id": "k4",
+   "key": "/",
+   "does": "ask"
+  }
+ ],
+ "focus": {
+  "id": "t1",
+  "tint": "red",
+  "icon": "exclamationmark.triangle",
+  "what": "The passport is still not renewed",
+  "why": "You fly in 13 hours and it has been late four days. Nothing else tonight matters as much.",
+  "action": "Open"
+ },
+ "replies": []
+}
