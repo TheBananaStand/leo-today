@@ -309,6 +309,17 @@ def notes(now, act):
 
 
 NOREPLY = re.compile(r"no[-_.]?reply|do[-_.]?not[-_.]?reply|notification|mailer|bounce", re.I)
+# Bulk senders: the ESP subdomains blasts go out from, and the mailbox names
+# nobody is sitting behind.
+BULK_ADDR = re.compile(r"@(?:email\d*|e|mail\d*|em|news|mkt|marketing|info|cs)\.|"
+                       r"^(?:news|newsletter|promo|offers|deals|marketing|updates|hello|team)@", re.I)
+# …and what a blast is about. A page about what is waiting on YOU has no
+# business carrying an advertisement, and — the reason this matters more than
+# tidiness — a marketing subject is a bag of common nouns, which is exactly
+# what makes a false subject: "Black Friday SALES" and "Weekly SALES Meeting"
+# share a word and nothing else.
+BLAST = re.compile(r"\b(black friday|cyber monday|% off|\d+% |deals?|sale|save big|"
+                   r"limited time|act now|unsubscribe|webinar|newsletter|coupon)\b", re.I)
 FROM = re.compile(r'^\s*"?(?P<name>[^"<]{1,60}?)"?\s*<(?P<addr>[^>]+)>\s*$')
 
 
@@ -345,10 +356,10 @@ def mail(now, act):
             if not isinstance(m, dict):
                 continue
             who, addr = sender(m.get("from"))
-            if NOREPLY.search(addr) or NOREPLY.search(who):
+            if NOREPLY.search(addr) or NOREPLY.search(who) or BULK_ADDR.search(addr):
                 continue
             subj = str(m.get("subject") or "").strip()
-            if not subj:
+            if not subj or BLAST.search(subj):
                 continue
             out.append({"id": f"m{m.get('id', len(out))}", "who": who[:40],
                         "subject": subj[:90], "unread": not m.get("is_read")})
