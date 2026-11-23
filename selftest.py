@@ -43,11 +43,31 @@ INBOX = [{"from": "Maya Chen <maya@acme.com>", "subject": "Austin itinerary — 
 HOUSE = [{"available": True, "entity_id": "lock.front_door", "friendly_name": "Front Door", "state": "unlocked"}]
 
 m.acting = lambda g: "acting-token"
-m.graph = lambda path, token=None, **kw: (
-    CAL if path.startswith("calendar") else REM if path.startswith("reminders") else FEED)
+COSTS = {"data": {"spent_usd": 137.42, "projected_usd": 179.21, "daily_run_rate_usd": 5.97}}
+JOBS = {"data": [{"id": "j1", "name": "Nightly release", "enabled": True,
+                  "last_status": "failed", "last_run_at": iso(11, 15, -1)},
+                 {"id": "j2", "name": "Gmail sync", "enabled": True, "last_status": "success"}]}
+RELS = {"releases": [{"id": "r1", "version": "1.4.0"}]}
+LOCS = {"data": [{"user_id": "u1", "address": "3 Maple St, Austin", "recorded_at": iso(14, 50)}]}
+PEOPLE = {"data": [{"id": "u1", "name": "Scott"}]}
+
+def _graph(path, token=None, **kw):
+    if path.startswith("calendar"):   return CAL
+    if path.startswith("reminders"):  return REM
+    if path.startswith("feed"):       return FEED
+    if path.startswith("costs"):      return COSTS
+    if path.startswith("scheduler"):  return JOBS
+    if path.startswith("releases"):   return RELS
+    if path.startswith("locations"):  return LOCS
+    if path.startswith("people"):     return PEOPLE
+    raise m.Gap(f"no stub for {path}")
+
+m.graph = _graph
 m.tool = lambda name, args, tok: (
     json.dumps(INBOX) if name == "email" else
     json.dumps(HOUSE) if name == "home_assistant" else
+    json.dumps({"total_spending": 2341.0,
+                "categories": [{"category_name": "Travel", "total": 980.0}]}) if name == "finance" else
     "Cloudy. 5° now, 2° / 7° today.")
 m.ask_claude = lambda *a, **k: json.dumps(
     {"headline": "Three meetings done, afternoon clear.",
@@ -74,5 +94,9 @@ print("house        :", [h["what"] for h in d.get("house", [])])
 print("weather      :", d.get("weather", {}).get("temp"), d.get("weather", {}).get("range"))
 print("brief        :", (d.get("brief") or {}).get("headline", "(none)")[:60],
       "| focus:", ((d.get("brief") or {}).get("focus") or {}).get("what", "")[:30])
+print("money        :", (d.get("money") or {}).get("amount"), "|", (d.get("money") or {}).get("note", "")[:40])
+print("leo cost     :", (d.get("spend") or {}).get("amount"), "|", (d.get("spend") or {}).get("note", "")[:46])
+print("around you   :", [h["what"] for h in d.get("house", [])])
 print("gaps         :", [g["id"] for g in d.get("gaps", [])] or "none")
+assert not d.get("gaps"), "every stubbed source should have answered"
 print("\nOK — a whole payload built with the hub stubbed out.")

@@ -654,6 +654,97 @@ def briefing(user, items, evs, now, extras):
     return d
 
 
+def money(now, act):
+    """Month to date, against what a month usually costs.
+
+    `spending_summary` answers DOLLARS (the tool divides cents by 100), while
+    the transactions route answers signed CENTS. Mixing those is a factor of
+    a hundred on a page about money, so only one of them is read here.
+    """
+    first = now.replace(day=1).date().isoformat()
+    out = tool("finance", {"action": "spending_summary",
+                           "start_date": first, "end_date": now.date().isoformat()}, act)
+    d = json.loads(out)
+    total = float(d.get("total_spending") or 0)
+    if total <= 0:
+        raise Gap("no spending is recorded for this month yet")
+    cats = sorted((d.get("categories") or []), key=lambda c: -float(c.get("total") or 0))
+    top = cats[0] if cats else None
+    return {"amount": f"${total:,.0f}",
+            "note": f"{top['category_name']} is the largest at ${float(top['total']):,.0f}"
+                    if top and top.get("category_name") else "this month so far",
+            "tint": "blue", "used": "0", "rest": "1"}
+
+
+def spend(now, _act):
+    """What the household's own models cost. Bare package credential."""
+    d = (graph("costs/live") or {}).get("data") or {}
+    so_far = float(d.get("spent_usd") or 0)
+    projected = float(d.get("projected_usd") or 0)
+    rate = float(d.get("daily_run_rate_usd") or 0)
+    if so_far <= 0:
+        raise Gap("nothing is recorded for this period")
+    used = max(0.0, min(1.0, so_far / projected)) if projected > 0 else 1.0
+    return {"amount": f"${so_far:,.2f}",
+            "note": f"${rate:,.2f} a day — on track for ${projected:,.0f} by month end"
+                    if projected else "this month",
+            "tint": "blue", "used": str(int(used * 100)), "rest": str(100 - int(used * 100))}
+
+
+def box(now, _act):
+    """Only what is WRONG with the box. Bare package credential both times."""
+    out = []
+    try:
+        jobs = (graph("scheduler/jobs") or {}).get("data") or []
+        bad = [j for j in jobs if j.get("enabled") and str(j.get("last_status") or "") not in
+               ("", "success", "running")]
+        for j in bad[:3]:
+            last = when(j.get("last_run_at"))
+            out.append({"icon": "clock.badge.exclamationmark", "tint": "amber",
+                        "what": f"{j.get('name') or j.get('id')} is failing",
+                        "detail": f"last ran {clock(last)} {last.strftime('%-d %b')}" if last else ""})
+    except Gap:
+        pass
+    try:
+        rel = (graph("releases/pending") or {}).get("releases") or []
+        if rel:
+            out.append({"icon": "shippingbox", "tint": "teal",
+                        "what": f"{len(rel)} build{'s' if len(rel) > 1 else ''} landed, unannounced",
+                        "detail": str(rel[0].get("version") or "")})
+    except Gap:
+        pass
+    if not out:
+        raise Gap("nothing is wrong with the box")
+    return [{"id": f"b{i}", **row} for i, row in enumerate(out)]
+
+
+def whereis(now, _act):
+    """Who is where. Bare package credential; `address` arrives resolved."""
+    rows_ = (graph("locations/latest") or {}).get("data") or []
+    try:
+        who = {p.get("id") or p.get("user_id"): (p.get("name") or p.get("display_name"))
+               for p in ((graph("people") or {}).get("data") or [])}
+    except Gap:
+        who = {}
+    out = []
+    for r in rows_:
+        seen = when(r.get("recorded_at"))
+        if not seen or (now - seen) > timedelta(hours=6):
+            continue
+        name = who.get(r.get("user_id")) or str(r.get("user_id") or "")[:8]
+        place = str(r.get("address") or "").split(",")[0][:40]
+        if not place:
+            continue
+        mins = int((now - seen).total_seconds() // 60)
+        out.append({"id": f"w{len(out)}", "icon": "location", "tint": "green",
+                    "what": f"{name} — {place}",
+                    "detail": "just now" if mins < 5 else f"{mins} min ago" if mins < 90
+                              else f"{mins // 60}h ago"})
+    if not out:
+        raise Gap("nobody has shared a location recently")
+    return out[:4]
+
+
 # ---------------------------------------------------------------------------
 # Subjects
 # ---------------------------------------------------------------------------
@@ -859,7 +950,8 @@ def payload(grant=None, user=""):
     act = acting(grant)
 
     sources = {"events": events, "tasks": tasks, "notes": notes,
-               "mail": mail, "weather": weather, "house": house}
+               "mail": mail, "weather": weather, "house": house,
+               "money": money, "spend": spend, "box": box, "whereis": whereis}
     got, gaps = {}, []
     with ThreadPoolExecutor(max_workers=len(sources)) as pool:
         futures = {k: pool.submit(fn, now, act) for k, fn in sources.items()}
@@ -892,8 +984,13 @@ def payload(grant=None, user=""):
 
     if got.get("weather"):
         d["weather"] = got["weather"]
-    if got.get("house"):
-        d["house"] = got["house"]
+    around = (got.get("house") or []) + (got.get("whereis") or []) + (got.get("box") or [])
+    if around:
+        d["house"] = around[:8]
+    if got.get("money"):
+        d["money"] = got["money"]
+    if got.get("spend"):
+        d["spend"] = got["spend"]
 
     # The day
     if evs:
@@ -965,8 +1062,12 @@ def payload(grant=None, user=""):
     if got.get("weather"):
         w = got["weather"]
         extras.append(f"WEATHER: {w['temp']} {w['condition']}, {w['range']}.")
-    if got.get("house"):
-        extras.append("THE HOUSE: " + "; ".join(h["what"] for h in got["house"]) + ".")
+    if around:
+        extras.append("AROUND YOU: " + "; ".join(h["what"] for h in around) + ".")
+    if got.get("money"):
+        extras.append(f"SPENDING THIS MONTH: {got['money']['amount']} — {got['money']['note']}.")
+    if got.get("spend"):
+        extras.append(f"THIS HUB'S MODEL SPEND: {got['spend']['amount']}, {got['spend']['note']}.")
     if gaps:
         extras.append("NOT AVAILABLE RIGHT NOW: "
                       + "; ".join(g["id"] for g in gaps) + ".")

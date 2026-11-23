@@ -86,7 +86,12 @@ descriptor = {
         # spawn path does not mint from this today.
         "graph_scopes": ["calendar:read", "reminders:read", "feed:read",
                          "hub_tools:read", "hub_tools:invoke",
-                         "inference:messages", "surfaces:refresh"],
+                         "inference:messages", "surfaces:refresh",
+                         # the census the research turned up: money, this hub's own
+                         # model spend, who is where, and what is wrong with the box.
+                         # All four are `global_list!` routes or tools we already reach.
+                         "finance:read", "costs:read", "locations:read",
+                         "people:read", "scheduler:read", "releases:read"],
         # The route that DOES reach the process: a declared settings key,
         # handed over as an env var at spawn.
         "settings_read": ["today_graph_token"],
