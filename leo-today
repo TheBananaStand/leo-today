@@ -183,6 +183,22 @@ def ask_claude(system, turns, work="periodic_check", max_tokens=600):
     return "".join(out).strip()
 
 
+def nudge():
+    """Tell any open Today page to refetch.
+
+    The briefing is written on a background thread, so by the time it exists
+    the page that triggered it has already been drawn. Without this it would
+    appear on the NEXT load, which on a page you leave open all day could be
+    hours. `surfaces/changed` is the hub's own refresh channel — the same one
+    a POST to `/api/reminders/...` rings by path — and the hub coalesces
+    repeats within a second, so a burst of rewrites is one refetch.
+    """
+    try:
+        _call("/graph/v1/surfaces/changed", TOKEN, data={"topic": "today"})
+    except Exception as e:  # noqa: BLE001 — a nudge that fails costs a refresh
+        print(f"today: could not nudge the surface: {type(e).__name__}", flush=True)
+
+
 def acting(grant):
     """Spend the hub's single-use grant for a token that acts for the asker.
 

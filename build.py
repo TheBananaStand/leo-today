@@ -41,7 +41,10 @@ descriptor = {
             "html": markup,
             "title": "Today",
             # A tick or a new feed item redraws the page; nothing here polls.
-            "refreshOn": ["reminders", "feed", "calendar"],
+            # A topic is the first path segment after /api/ — so a tick on
+            # /api/reminders/... rings "reminders". "today" is our own,
+            # published when the briefing has been rewritten.
+            "refreshOn": ["reminders", "feed", "calendar", "today"],
             "actions": {
                 # The tick on a row, through the route Reminders already
                 # serves to a person — this page holds no privilege of its own.
@@ -70,7 +73,7 @@ descriptor = {
         # spawn path does not mint from this today.
         "graph_scopes": ["calendar:read", "reminders:read", "feed:read",
                          "hub_tools:read", "hub_tools:invoke",
-                         "inference:messages"],
+                         "inference:messages", "surfaces:refresh"],
         # The route that DOES reach the process: a declared settings key,
         # handed over as an env var at spawn.
         "settings_read": ["today_graph_token"],

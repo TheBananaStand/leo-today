@@ -28,7 +28,8 @@
       "refreshOn": [
         "reminders",
         "feed",
-        "calendar"
+        "calendar",
+        "today"
       ],
       "actions": {
         "complete": {
@@ -70,7 +71,8 @@
       "feed:read",
       "hub_tools:read",
       "hub_tools:invoke",
-      "inference:messages"
+      "inference:messages",
+      "surfaces:refresh"
     ],
     "settings_read": [
       "today_graph_token"
