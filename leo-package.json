@@ -58,7 +58,6 @@
     "build": "make",
     "bin": "leo-today",
     "port": 8477,
-    "supervised": false,
-    "rev": "116183a52adfdcd533beb01007098248132a9b55"
+    "supervised": false
   }
 }

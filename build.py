@@ -77,8 +77,8 @@ descriptor = {
         "supervised": False,
     },
 }
-if rev:
-    descriptor["app"]["rev"] = rev
+# No `rev`: the branch is the pin. A stamped rev can only ever name the
+# commit BEFORE the one carrying it, which reads as a mistake every time.
 
 (here / "leo-package.json").write_text(json.dumps(descriptor, indent=2) + "\n")
 print(f"leo-package.json written ({len(markup)} bytes of markup, rev {rev[:9] or 'none'})")
