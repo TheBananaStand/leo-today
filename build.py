@@ -41,10 +41,23 @@ descriptor = {
             "html": markup,
             "title": "Today",
             # A tick or a new feed item redraws the page; nothing here polls.
-            # A topic is the first path segment after /api/ — so a tick on
-            # /api/reminders/... rings "reminders". "today" is our own,
-            # published when the briefing has been rewritten.
-            "refreshOn": ["reminders", "feed", "calendar", "today"],
+            # A topic is the first path segment after /api/ on a successful
+            # write — so a tick on /api/reminders/... rings "reminders".
+            #
+            # What this does NOT cover, measured rather than assumed:
+            #   · a calendar changed on the Mac. The satellite sync writes
+            #     rows straight to the database with no HTTP request, so the
+            #     path rule structurally cannot see it.
+            #   · mail ARRIVING. Nothing email-shaped is published at all;
+            #     `notifications` is the nearest thing and it is gated on the
+            #     notification policy, so quiet mail lands silently.
+            # `email` covers your own actions on a message; `notifications`
+            # covers arrivals loud enough to badge. Both are partial and are
+            # here because partial beats nothing.
+            #
+            # "today" is ours, published when the briefing has been rewritten.
+            "refreshOn": ["reminders", "feed", "calendar",
+                          "email", "notifications", "today"],
             "actions": {
                 # The tick on a row, through the route Reminders already
                 # serves to a person — this page holds no privilege of its own.

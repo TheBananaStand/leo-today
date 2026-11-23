@@ -29,6 +29,8 @@
         "reminders",
         "feed",
         "calendar",
+        "email",
+        "notifications",
         "today"
       ],
       "actions": {

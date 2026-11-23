@@ -357,9 +357,9 @@ def tasks(now, act):
         d = when(r.get("due") or r.get("due_at") or r.get("due_date"))
         if not d or d.date() > today + timedelta(days=1):
             continue
-        words, late = due_words(d.date(), today)
+        phrase, late = due_words(d.date(), today)
         out.append({"id": str(r.get("id") or len(out)), "title": str(r.get("title") or "Untitled"),
-                    "when": words, "late": "1" if late else "", "sort": (today - d.date()).days})
+                    "when": phrase, "late": "1" if late else "", "sort": (today - d.date()).days})
     # Genuinely late first, then by how late; the abandoned sink.
     out.sort(key=lambda r: (not r["late"], -r["sort"]))
     return out
@@ -829,9 +829,9 @@ def payload(grant=None, user=""):
         mood = str(br.get("mood") or "calm").lower()
         br["tint"] = {"behind": "red", "busy": "amber"}.get(mood, "green")
         br["icon"] = {"behind": "exclamationmark.triangle", "busy": "flame"}.get(mood, "sun.max")
-        notes = [n for n in (br.get("notes") or []) if isinstance(n, dict) and n.get("what")]
+        told = [n for n in (br.get("notes") or []) if isinstance(n, dict) and n.get("what")]
         br["notes"] = [{"id": f"bn{i}", "what": str(n.get("what"))[:160],
-                        "why": str(n.get("why") or "")[:200]} for i, n in enumerate(notes[:4])]
+                        "why": str(n.get("why") or "")[:200]} for i, n in enumerate(told[:4])]
         focus = br.get("focus") if isinstance(br.get("focus"), dict) else {}
         br["focus"] = {"what": str(focus.get("what") or "")[:140],
                        "why": str(focus.get("why") or "")[:240]}
