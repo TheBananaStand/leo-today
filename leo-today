@@ -55,14 +55,22 @@ class Gap(Exception):
     """A source did not answer. Carries what to tell the reader."""
 
 
-def graph(path, **params):
-    """One Graph GET. Raises Gap with a sentence a person can read."""
-    if not TOKEN:
-        raise Gap("this package has no Graph credential — reinstall it so the hub mints one")
+def graph(path, token=None, **params):
+    """One Graph GET. Raises Gap with a sentence a person can read.
+
+    `token` is the ACTING credential when there is one. Several hub domains —
+    reminders, the feed — answer for one person and refuse a bare package
+    credential outright: "this endpoint answers for one person and a package
+    credential names none". Those reads must carry a token exchanged from the
+    grant the hub stamps on the request.
+    """
+    token = token or TOKEN
+    if not token:
+        raise Gap("this package has no Graph credential — see the README")
     url = f"{API}/graph/v1/{path}"
     if params:
         url += "?" + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
-    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {TOKEN}"})
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
             return json.loads(r.read().decode())
@@ -77,6 +85,27 @@ def graph(path, **params):
         raise Gap(f"it timed out after {TIMEOUT:g}s") from None
     except Exception as e:  # noqa: BLE001 — a source never takes the page down
         raise Gap(f"{type(e).__name__}: {e}") from None
+
+
+def acting(grant):
+    """Spend the hub's single-use grant for a token that acts for the asker.
+
+    No grant, or an exchange that fails, is not fatal: the household domains
+    still answer on the package credential, so the page keeps the blocks it
+    can have and the per-person ones report themselves missing like any other
+    source.
+    """
+    if not grant or not TOKEN:
+        return None
+    body = json.dumps({"grant": grant}).encode()
+    req = urllib.request.Request(
+        f"{API}/graph/v1/acting/exchange", data=body, method="POST",
+        headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            return json.loads(r.read().decode()).get("access_token")
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def rows(v, *keys):
@@ -124,7 +153,7 @@ def lead(start, now):
     return start.strftime("At %-I:%M")
 
 
-def events(now):
+def events(now, _act):
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     raw = rows(graph("calendar/events",
                      start=start.isoformat(),
@@ -149,8 +178,8 @@ def events(now):
     return out
 
 
-def tasks(now):
-    raw = rows(graph("reminders/items", active_only="true"), "items", "reminders")
+def tasks(now, act):
+    raw = rows(graph("reminders/items", token=act, active_only="true"), "items", "reminders")
     today = now.date()
     out = []
     for r in raw:
@@ -181,8 +210,8 @@ ICONS = {"alert": ("exclamationmark.triangle", "amber"),
          "briefing": ("doc.text", "blue")}
 
 
-def notes(now):
-    raw = rows(graph("feed/items", limit="20"), "items", "feed")
+def notes(now, act):
+    raw = rows(graph("feed/items", token=act, limit="20"), "items", "feed")
     out = []
     for n in raw:
         if n.get("dismissed") or n.get("deleted_at"):
@@ -201,15 +230,16 @@ def notes(now):
     return out
 
 
-def payload():
+def payload(grant=None):
     now = datetime.now(timezone.utc).astimezone()
+    act = acting(grant)
     sources = {"events": events, "tasks": tasks, "notes": notes}
     got, gaps = {}, []
 
     # In parallel, and each one's failure is its own. Nothing here can make
     # another source's block disappear.
     with ThreadPoolExecutor(max_workers=len(sources)) as pool:
-        futures = {k: pool.submit(fn, now) for k, fn in sources.items()}
+        futures = {k: pool.submit(fn, now, act) for k, fn in sources.items()}
         for key, fut in futures.items():
             try:
                 got[key] = fut.result()
@@ -264,7 +294,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         path = self.path.split("?")[0]
         if path == "/leo/ui/data":
-            body = json.dumps(payload()).encode()
+            grant = self.headers.get("x-leo-acting-grant")
+            body = json.dumps(payload(grant)).encode()
         elif path in ("/leo/health", "/health"):
             body = b'{"ok":true}'
         else:
