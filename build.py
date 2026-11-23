@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate leo-package.json from today.html.
+"""Generate today.descriptor.json from today.html.
 
 The markup is a FILE, not a string pasted into JSON: it is what
 `leo packages preview today.html --data samples/ready.json` draws, what a
@@ -80,5 +80,5 @@ descriptor = {
 # No `rev`: the branch is the pin. A stamped rev can only ever name the
 # commit BEFORE the one carrying it, which reads as a mistake every time.
 
-(here / "leo-package.json").write_text(json.dumps(descriptor, indent=2) + "\n")
-print(f"leo-package.json written ({len(markup)} bytes of markup, rev {rev[:9] or 'none'})")
+(here / "today.descriptor.json").write_text(json.dumps(descriptor, indent=2) + "\n")
+print(f"today.descriptor.json written ({len(markup)} bytes of markup, rev {rev[:9] or 'none'})")

@@ -5,7 +5,7 @@ knowing. It is a Leo **app package** — a descriptor plus a small process — s
 it installs over a running hub with no rebuild of Leo and no checkout.
 
 ```bash
-leo packages install leo-package.json --enabled
+leo packages install today.descriptor.json --enabled
 ```
 
 ## What it is made of
@@ -14,7 +14,7 @@ leo packages install leo-package.json --enabled
 |---|---|
 | `today.html` | the whole screen, in Leo's HTML subset (`leo examples show docs/html-subset.md`) |
 | `leo-today` | the process behind it: fetches a few hub domains over the Graph and answers `GET /leo/ui/data` |
-| `build.py` | puts the markup into `leo-package.json` — the markup stays a file you can open in a browser |
+| `build.py` | puts the markup into `today.descriptor.json` — the markup stays a file you can open in a browser |
 | `samples/*.json` | the four states the screen was designed against: ready, empty, nothing-answered, and awkward data |
 
 ## The two ideas worth stealing
