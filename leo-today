@@ -238,18 +238,27 @@ def events(now, _act):
                      end=(start + timedelta(days=2)).isoformat()), "events", "items")
     out = []
     for e in raw:
-        t = when(e.get("start") or e.get("start_at") or e.get("starts_at"))
+        raw_start = e.get("start") or e.get("start_at") or e.get("starts_at")
+        t = when(raw_start)
         if not t:
             continue
+        # A date with no time in it is a whole day, wherever the clock is.
+        date_only = bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(raw_start).strip()))
+        if date_only:
+            t = t.replace(hour=0, minute=0)
         end = when(e.get("end") or e.get("end_at") or e.get("ends_at"))
         mins = int((end - t).total_seconds() // 60) if end and end > t else 60
-        allday = mins >= 300 or (t.hour == 0 and t.minute == 0 and mins >= 180)
+        allday = date_only or mins >= 300 or (t.hour == 0 and t.minute == 0 and mins >= 180)
+        # Over by more than an hour and not running: not today's business.
+        if t.date() < now.date() and not (t + timedelta(minutes=mins) > now):
+            continue
         cal = str(e.get("calendar") or e.get("calendar_name") or "")
         out.append({
             "id": str(e.get("id") or len(out)), "at": t, "mins": min(mins, 600),
             "title": str(e.get("title") or e.get("summary") or "Untitled"),
             "where": str(e.get("location") or "")[:60],
             "tomorrow": t.date() > now.date(), "allday": "1" if allday else "",
+            "live_now": t <= now <= t + timedelta(minutes=mins),
             "tint": TINTS[hash(cal) % len(TINTS)] if cal else "blue",
         })
     out.sort(key=lambda r: r["at"])
@@ -455,7 +464,7 @@ def build_threads(items, now):
 # ---------------------------------------------------------------------------
 
 def day_strip(evs, now):
-    today = [e for e in evs if not e["tomorrow"] and not e["allday"]]
+    today = [e for e in evs if e["at"].date() == now.date() and not e["allday"]]
     lo, hi = DAY_FROM, DAY_TO
     for e in today:
         lo = min(lo, minutes(e["at"]))
@@ -586,7 +595,7 @@ def payload(grant=None, user=""):
                     "title": nxt["title"],
                     "where": " · ".join(x for x in (nxt["where"], f"{nxt['mins']}m") if x),
                     "join": "", "faces": []}
-        rail, today = [], [e for e in evs if not e["tomorrow"]]
+        rail, today = [], [e for e in evs if e["at"].date() == now.date() or e["live_now"]]
         for i, e in enumerate(today[:SHOWN]):
             rail.append({"id": e["id"], "time": clock(e["at"]), "title": e["title"],
                          "tint": e["tint"], "free": "", "what": "",
