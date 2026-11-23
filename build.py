@@ -43,21 +43,18 @@ descriptor = {
             # A tick or a new feed item redraws the page; nothing here polls.
             "refreshOn": ["reminders", "feed", "calendar"],
             "actions": {
-                # The tick on a row. `args.id` is the row it was on, and the
-                # route is the one Reminders already serves to a person, so
-                # this page gets no privilege of its own.
-                "complete": {
-                    "method": "PATCH",
-                    "path": "/api/reminders/items/{args.id}/toggle",
-                    "body": {},
-                    "refresh": "reload",
-                },
-                # The way out of the "nothing answered" state: ask again.
-                "refresh": {
-                    "method": "GET",
-                    "path": "/api/packages/today/ui/data",
-                    "refresh": "reload",
-                },
+                # The tick on a row, through the route Reminders already
+                # serves to a person — this page holds no privilege of its own.
+                "complete": {"method": "PATCH", "path": "/api/reminders/items/{args.id}/toggle",
+                             "body": {}, "refresh": "reload"},
+                # Ask about a subject: the chip hands its own words over.
+                "ask": {"kind": "setState", "key": "form.message", "value": "{args.text}"},
+                # The way out of the "nothing answered" state, and the header's
+                # own refresh.
+                "refresh": {"method": "GET", "path": "/api/packages/today/ui/data",
+                            "refresh": "reload"},
+                "show_changed": {"method": "GET", "path": "/api/packages/today/ui/data",
+                                 "refresh": "reload"},
             },
         }
     },
@@ -71,7 +68,8 @@ descriptor = {
         # Declared because it is what this package actually needs, and so the
         # install consent names it — but see the note in `leo-today`: the app
         # spawn path does not mint from this today.
-        "graph_scopes": ["calendar:read", "reminders:read", "feed:read"],
+        "graph_scopes": ["calendar:read", "reminders:read", "feed:read",
+                         "hub_tools:read", "hub_tools:invoke"],
         # The route that DOES reach the process: a declared settings key,
         # handed over as an env var at spawn.
         "settings_read": ["today_graph_token"],

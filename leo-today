@@ -1,119 +1,101 @@
 #!/usr/bin/env python3
 """Today — the payload behind the Today screen.
 
-A Leo "app" package: its own process, reached by the hub at
-`GET /leo/ui/data`, which is what the Today screen's `{path}`s bind to.
+A Leo "app" package: its own process, reached by the hub at `GET /leo/ui/data`,
+which is what the screen's `{path}`s bind to.
 
-It holds no model and no schedule. Everything it does is fetch a handful of
-hub domains over the Graph and shape them into the ONE payload the markup
-reads. The markup decides nothing about what is on the page: a block whose
-list is empty is absent, because an empty array is falsy in the language.
+It holds no model. Everything on the page is computed from what the hub can
+answer, by rules, on every request — because the alternative is a page that
+waits on a model to tell it what a Tuesday looks like.
 
-The rule the error handling follows, and the reason this is worth reading:
-EVERY SOURCE FAILS ON ITS OWN. A source that errors, times out, or that this
-package's token may not reach leaves its key missing — so its block is simply
-not on the page, the other blocks are unaffected, and the footer says which
-one did not answer. A page that is down whenever any one package is down is
-not a page you would keep open.
+Three ideas carry the whole file:
+
+**Every source fails on its own.** Each is fetched in parallel with its own
+budget. One that errors, times out, or that this package's token may not reach
+leaves its key missing, so its block is simply absent from the page — an empty
+array is false in the screen's language. A page that is down whenever any one
+package is down is not a page you would keep open.
+
+**The day is a shape, not a list.** `strip` is the day as proportional blocks
+and `at` is where you are in it. Both are spans in minutes; the markup turns
+them into widths with `grow` and computes nothing.
+
+**The page is a list of SUBJECTS.** A passport, two flights, an unanswered
+message and tomorrow's departure are one thing. `threads` finds those by
+shared vocabulary across sources — no model, no stored state, same answer for
+the same inputs.
 """
 
-import base64
-import hashlib
 import json
 import os
-import struct
+import re
 import sys
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
-import time
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 API = os.environ.get("LEO_API_URL", "http://127.0.0.1:8420").rstrip("/")
-# The hub hands `LEO_PACKAGE_TOKEN` to an app whose entitlements earn one.
-# Today's do not: `graph_scopes_for` (leo-package/src/manager.rs) only ever
-# mints the INFERENCE scope, so a declared `graph_scopes` is stored,
-# validated and never turned into a credential. Until that is fixed the
-# token arrives the other supported way — a settings key this package
-# declares in `settings_read`, which the hub hands over as an env var.
 # ORDER MATTERS. Declaring `entitlements.inference` makes the hub mint a
-# LEO_PACKAGE_TOKEN — scoped to inference and NOTHING ELSE, because
-# `graph_scopes_for` builds its list from the inference entitlement alone. The
-# settings token is the one minted with the read scopes, so it has to win;
-# preferring the hub's would silently cost the page its calendar.
+# LEO_PACKAGE_TOKEN scoped to inference and NOTHING ELSE — `graph_scopes_for`
+# builds its list from the inference entitlement alone — so the settings
+# token, which is the one minted with the read scopes, has to win.
 TOKEN = (os.environ.get("today_graph_token")
          or os.environ.get("TODAY_GRAPH_TOKEN")
          or os.environ.get("LEO_PACKAGE_TOKEN") or "")
 PORT = int(os.environ.get("PORT") or os.environ.get("LEO_APP_PORT") or "8477")
+DATA = os.environ.get("LEO_DATA_DIR", ".")
 
-# A source gets this long and no longer. The page is a glance: four sources
-# answering in parallel means the slowest one is the wait, so the budget is
-# per-source and small rather than one clock around the lot.
-TIMEOUT = 2.5
-# What a glance shows. The cap is HERE and not in the markup: 40 rows laid
-# out is 2691pt of scroll, which is a list, not a glance. The count beside
-# the heading is what says there are more.
-SHOWN = 5
+TIMEOUT = 3.0
+SHOWN = 6
+# The window the day strip is drawn across. Widened by anything outside it.
+DAY_FROM, DAY_TO = 7 * 60, 19 * 60
 
-TINTS = ["blue", "purple", "teal", "orange", "green", "pink", "amber", "red"]
-
-
-def ask_claude(system, turns, work="conversation"):
-    """One turn, through the hub — this package never holds a model key.
-
-    `work` says what KIND of work this is instead of naming a model, so the
-    household's own routing picks one and the ceiling can downgrade it. A
-    hardcoded model id here would be a second opinion about a decision the hub
-    already owns.
-    """
-    body = json.dumps({
-        "work": work,
-        "max_tokens": 700,
-        "system": system,
-        "messages": turns,
-    }).encode()
-    req = urllib.request.Request(
-        f"{API}/graph/v1/inference/messages", data=body, method="POST",
-        headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=90) as r:
-        answer = json.loads(r.read().decode())
-    out = []
-    for block in answer.get("content") or []:
-        if isinstance(block, dict) and block.get("type") == "text":
-            out.append(block.get("text", ""))
-    return "".join(out).strip() or "(no answer)"
+TINTS = ["blue", "purple", "teal", "orange", "green", "pink", "amber"]
+_lock = threading.Lock()
 
 
 class Gap(Exception):
-    """A source did not answer. Carries what to tell the reader."""
+    """A source did not answer. Carries a sentence a person can read."""
+
+
+# ---------------------------------------------------------------------------
+# Reaching the hub
+# ---------------------------------------------------------------------------
+
+def _call(path, token, data=None, **params):
+    url = f"{API}{path}"
+    if params:
+        url += "?" + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
+    body = json.dumps(data).encode() if data is not None else None
+    req = urllib.request.Request(
+        url, data=body, method="POST" if body else "GET",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        return json.loads(r.read().decode())
 
 
 def graph(path, token=None, **params):
-    """One Graph GET. Raises Gap with a sentence a person can read.
+    """One Graph GET, with a readable failure.
 
-    `token` is the ACTING credential when there is one. Several hub domains —
-    reminders, the feed — answer for one person and refuse a bare package
-    credential outright: "this endpoint answers for one person and a package
-    credential names none". Those reads must carry a token exchanged from the
+    `token` is the ACTING credential when there is one. Several domains —
+    reminders, the feed — answer for ONE person and refuse a bare package
+    credential outright, so those reads must carry a token exchanged from the
     grant the hub stamps on the request.
     """
     token = token or TOKEN
     if not token:
         raise Gap("this package has no Graph credential — see the README")
-    url = f"{API}/graph/v1/{path}"
-    if params:
-        url += "?" + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
-    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-            return json.loads(r.read().decode())
+        return _call(f"/graph/v1/{path}", token, **params)
     except urllib.error.HTTPError as e:
-        body = e.read().decode()[:200]
+        detail = (e.read() or b"").decode()[:160]
         if e.code == 403:
-            raise Gap(f"the hub refused it (403) — a scope is missing: {body}") from None
+            raise Gap(f"the hub refused it (403) — a scope is missing: {detail}") from None
         if e.code == 501:
             raise Gap("this hub does not serve that route") from None
         raise Gap(f"the hub answered {e.code}") from None
@@ -123,23 +105,39 @@ def graph(path, token=None, **params):
         raise Gap(f"{type(e).__name__}: {e}") from None
 
 
+def tool(name, args, token):
+    """Run one hub tool as the acting person.
+
+    The blocks that have no Graph domain of their own — the weather, the mail,
+    the house — are tools, and `/graph/v1/tools/invoke` runs one through the
+    hub's whole gate chain as whoever the acting token names. `destination`
+    is `hub`: the answer is going onto a page, not into a model.
+    """
+    if not token:
+        raise Gap("no acting credential — this block is per-person")
+    try:
+        out = _call("/graph/v1/tools/invoke", token,
+                    data={"name": name, "arguments": args, "destination": "hub"})
+    except urllib.error.HTTPError as e:
+        raise Gap(f"the hub refused `{name}` ({e.code})") from None
+    except Exception as e:  # noqa: BLE001
+        raise Gap(f"`{name}`: {type(e).__name__}") from None
+    if out.get("is_error"):
+        raise Gap(f"`{name}` answered with an error")
+    return out.get("output") or ""
+
+
 def acting(grant):
     """Spend the hub's single-use grant for a token that acts for the asker.
 
     No grant, or an exchange that fails, is not fatal: the household domains
-    still answer on the package credential, so the page keeps the blocks it
-    can have and the per-person ones report themselves missing like any other
-    source.
+    still answer on the package credential, and the per-person blocks report
+    themselves missing like any other source.
     """
     if not grant or not TOKEN:
         return None
-    body = json.dumps({"grant": grant}).encode()
-    req = urllib.request.Request(
-        f"{API}/graph/v1/acting/exchange", data=body, method="POST",
-        headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-            return json.loads(r.read().decode()).get("access_token")
+        return _call("/graph/v1/acting/exchange", TOKEN, data={"grant": grant}).get("access_token")
     except Exception:  # noqa: BLE001
         return None
 
@@ -158,14 +156,9 @@ def rows(v, *keys):
     return []
 
 
-def clock(ts):
-    """`2026-11-24T09:30:00Z` -> `9:30`, in this box's own timezone."""
-    try:
-        t = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
-        return t.astimezone().strftime("%-I:%M")
-    except Exception:  # noqa: BLE001
-        return ""
-
+# ---------------------------------------------------------------------------
+# Time
+# ---------------------------------------------------------------------------
 
 def when(ts):
     try:
@@ -174,8 +167,15 @@ def when(ts):
         return None
 
 
+def clock(t):
+    return t.strftime("%-I:%M") if t else ""
+
+
+def minutes(t):
+    return t.hour * 60 + t.minute
+
+
 def lead(start, now):
-    """How far off a thing is, as a person would say it."""
     mins = int((start - now).total_seconds() // 60)
     if mins < -1:
         return "Started"
@@ -183,32 +183,70 @@ def lead(start, now):
         return "Now"
     if mins < 60:
         return f"In {mins} minutes"
-    if mins < 180:
+    if mins < 300:
         h, m = divmod(mins, 60)
         return f"In {h}h {m:02d}m" if m else f"In {h} hours"
     return start.strftime("At %-I:%M")
 
 
+def short_when(t, now):
+    """How far off, in the fewest characters that stay true.
+
+    `lead` is for the hero, where "In 25 minutes" is the point. A thread's
+    chip has room for two or three characters, and past about half a day the
+    hour stops meaning anything — a flight at 8:05 tomorrow is "tomorrow",
+    not "At 8:05", which reads as this morning and is the one wrong answer
+    the chip can give.
+    """
+    mins = int((t - now).total_seconds() // 60)
+    if mins < 0:
+        return "late"
+    if mins < 60:
+        return f"{mins}m"
+    if mins < 12 * 60:
+        return f"{mins // 60}h"
+    if t.date() == now.date():
+        return t.strftime("%-I:%M")
+    if t.date() == (now + timedelta(days=1)).date():
+        return "tomorrow"
+    return t.strftime("%a")
+
+
+def due_words(d, today):
+    late = (today - d).days
+    if late > 1:
+        return f"{late} days late", True
+    if late == 1:
+        return "Yesterday", True
+    if late == 0:
+        return "Today", False
+    if late == -1:
+        return "Tomorrow", False
+    return d.strftime("%-d %b"), False
+
+
+# ---------------------------------------------------------------------------
+# The sources
+# ---------------------------------------------------------------------------
+
 def events(now, _act):
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    raw = rows(graph("calendar/events",
-                     start=start.isoformat(),
-                     end=(start + timedelta(days=1)).isoformat()), "events", "items")
+    raw = rows(graph("calendar/events", start=start.isoformat(),
+                     end=(start + timedelta(days=2)).isoformat()), "events", "items")
     out = []
     for e in raw:
         t = when(e.get("start") or e.get("start_at") or e.get("starts_at"))
-        if not t or t < now - timedelta(hours=2):
+        if not t:
             continue
+        end = when(e.get("end") or e.get("end_at") or e.get("ends_at"))
+        mins = int((end - t).total_seconds() // 60) if end and end > t else 60
         cal = str(e.get("calendar") or e.get("calendar_name") or "")
         out.append({
-            "id": str(e.get("id") or len(out)),
-            "at": t,
-            "time": clock(e.get("start") or e.get("start_at") or e.get("starts_at")),
+            "id": str(e.get("id") or len(out)), "at": t, "mins": min(mins, 600),
             "title": str(e.get("title") or e.get("summary") or "Untitled"),
             "where": str(e.get("location") or "")[:60],
-            "calendar": cal,
+            "tomorrow": t.date() > now.date(),
             "tint": TINTS[hash(cal) % len(TINTS)] if cal else "blue",
-            "now": "1" if t <= now <= t + timedelta(minutes=int(e.get("duration_min") or 60)) else "",
         })
     out.sort(key=lambda r: r["at"])
     return out
@@ -221,59 +259,279 @@ def tasks(now, act):
     for r in raw:
         if r.get("completed") or r.get("done"):
             continue
-        due = when(r.get("due") or r.get("due_at") or r.get("due_date"))
-        if not due:
+        d = when(r.get("due") or r.get("due_at") or r.get("due_date"))
+        if not d or d.date() > today + timedelta(days=1):
             continue
-        d = due.date()
-        if d > today:
-            continue  # today and overdue only — this is Today, not everything
-        late = (today - d).days
-        out.append({
-            "id": str(r.get("id") or len(out)),
-            "late": late,
-            "title": str(r.get("title") or "Untitled"),
-            "due": "Today" if late == 0 else ("Yesterday" if late == 1 else f"{late} days late"),
-            "overdue": "1" if late > 0 else "",
-            "done": "",
-        })
-    out.sort(key=lambda r: -r["late"])
+        words, late = due_words(d.date(), today)
+        out.append({"id": str(r.get("id") or len(out)), "title": str(r.get("title") or "Untitled"),
+                    "when": words, "late": "1" if late else "", "sort": (today - d.date()).days})
+    out.sort(key=lambda r: -r["sort"])
     return out
 
 
-ICONS = {"alert": ("exclamationmark.triangle", "amber"),
-         "recommendation": ("lightbulb", "teal"),
-         "action_taken": ("checkmark.circle", "green"),
-         "briefing": ("doc.text", "blue")}
-
-
 def notes(now, act):
-    raw = rows(graph("feed/items", token=act, limit="20"), "items", "feed")
+    raw = rows(graph("feed/items", token=act, limit="25"), "items", "feed")
     out = []
     for n in raw:
         if n.get("dismissed") or n.get("deleted_at"):
             continue
         t = when(n.get("created_at") or n.get("created"))
-        if t and (now - t) > timedelta(hours=18):
+        if t and (now - t) > timedelta(hours=20):
             continue
-        icon, tint = ICONS.get(str(n.get("feed_type") or ""), ("sparkles", "purple"))
-        out.append({
-            "id": str(n.get("id") or len(out)),
-            "icon": icon, "tint": tint,
-            "title": str(n.get("title") or "Untitled"),
-            "body": str(n.get("chat_summary") or n.get("body") or "")[:240],
-            "when": clock(n.get("created_at") or n.get("created")),
-        })
+        out.append({"id": str(n.get("id") or len(out)), "title": str(n.get("title") or "Untitled"),
+                    "body": str(n.get("chat_summary") or n.get("body") or "")[:200],
+                    "at": t, "when": clock(t)})
     return out
 
 
-def payload(grant=None):
+MAIL = re.compile(r"^\s*(?:\d+[.)]\s*)?(?:\[[^\]]*\]\s*)?(?P<who>[^|·\-—]{2,40}?)\s*[|·\-—]\s*(?P<subj>.{3,90})")
+
+
+def mail(now, act):
+    """Unanswered mail, read out of the inbox tool's prose.
+
+    The tool answers TEXT — `ToolResult` has no other channel — so this parses
+    lines rather than fields. A line it cannot read is skipped, never guessed
+    at: a wrong sender on a page about what is waiting on you is worse than a
+    shorter list.
+    """
+    out_text = tool("email", {"action": "list_inbox", "limit": 12}, act)
+    out = []
+    for line in out_text.splitlines():
+        m = MAIL.match(line.strip())
+        if not m:
+            continue
+        who, subj = m.group("who").strip(), m.group("subj").strip()
+        if not who or who.lower().startswith(("subject", "from", "no ", "total")):
+            continue
+        out.append({"id": f"m{len(out)}", "who": who, "subject": subj[:90]})
+        if len(out) >= 8:
+            break
+    return out
+
+
+def weather(now, act):
+    text = tool("get_forecast", {"days": 1}, act)
+    nums = re.findall(r"(-?\d+)\s*°", text)
+    first = text.strip().splitlines()[0] if text.strip() else ""
+    cond = re.sub(r"[^A-Za-z ,]", " ", first)
+    cond = re.sub(r"\s+", " ", cond).strip()[:40]
+    if not nums:
+        raise Gap("the forecast had no temperature in it")
+    hi, lo = (max(int(n) for n in nums[:4]), min(int(n) for n in nums[:4]))
+    return {"temp": f"{nums[0]}°", "range": f"{lo}° / {hi}°", "condition": cond or "Today",
+            "symbol": symbol_for(cond), "tint": "blue"}
+
+
+def symbol_for(cond):
+    c = (cond or "").lower()
+    for word, sym in (("thunder", "cloud.bolt"), ("snow", "cloud.snow"), ("rain", "cloud.rain"),
+                      ("drizzle", "cloud.drizzle"), ("fog", "cloud.fog"), ("mist", "cloud.fog"),
+                      ("overcast", "cloud"), ("cloud", "cloud.sun"), ("clear", "sun.max"),
+                      ("sun", "sun.max")):
+        if word in c:
+            return sym
+    return "cloud.sun"
+
+
+HOUSE_WATCH = (
+    ("lock", "unlocked", "lock.open", "red", "{name} is unlocked"),
+    ("binary_sensor", "open", "door.left.hand.open", "amber", "{name} is open"),
+    ("cover", "open", "door.garage.open", "amber", "{name} is open"),
+)
+
+
+def house(now, act):
+    """Only what is NOT right. A list of every device is a different page."""
+    text = tool("home_assistant", {"action": "get_entities"}, act)
+    out = []
+    for line in text.splitlines():
+        low = line.lower()
+        for domain, bad, icon, tint, shape in HOUSE_WATCH:
+            if domain in low and re.search(rf"\b{bad}\b", low):
+                name = re.split(r"[:=|]", line.strip())[0].strip()[:48] or domain
+                out.append({"id": f"h{len(out)}", "icon": icon, "tint": tint,
+                            "what": shape.format(name=name), "detail": ""})
+                break
+        if len(out) >= 4:
+            break
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Subjects
+# ---------------------------------------------------------------------------
+
+STOP = set("""a an the and or but of to in on at for with from by about into over after before
+is are was were be been being do does did have has had will would can could should may might must
+my your our their his her its this that these those it he she they we you i me us them not no yes
+new get got make made go going went back up down out off out again more most some any each every
+today tomorrow tonight morning afternoon evening week weekend month year day days time call email
+reply send meeting lunch dinner call re fwd""".split())
+WORD = re.compile(r"[A-Za-z][A-Za-z'’]{2,}")
+
+
+def words(text):
+    return [w.lower() for w in WORD.findall(text or "") if w.lower() not in STOP and len(w) > 3]
+
+
+def subjects(items):
+    """Group items that are about the same thing.
+
+    A token earns a thread when it appears in at least two items **from
+    different kinds** — a task and a message, a message and an event. One
+    source repeating a word is a list; two sources sharing one is a subject,
+    and that distinction is the whole of the rule. No model, no stored state:
+    the same items always give the same threads.
+    """
+    index = {}
+    for it in items:
+        for w in set(words(it["text"])):
+            index.setdefault(w, []).append(it)
+
+    def score(bucket):
+        kinds = {i["kind"] for i in bucket}
+        return (len(kinds), len(bucket))
+
+    seeds = [(w, b) for w, b in index.items() if len({i["kind"] for i in b}) >= 2]
+    seeds.sort(key=lambda wb: score(wb[1]), reverse=True)
+
+    used, threads = set(), []
+    for word, bucket in seeds:
+        members = [i for i in bucket if i["id"] not in used]
+        if len({i["kind"] for i in members}) < 2 or len(members) < 2:
+            continue
+        for i in members:
+            used.add(i["id"])
+        threads.append((word, members))
+        if len(threads) >= 3:
+            break
+    return threads, used
+
+
+KIND_ICON = {"task": "checkmark.square", "mail": "envelope",
+             "event": "calendar", "note": "sparkles"}
+
+
+def build_threads(items, now):
+    found, used = subjects(items)
+    out = []
+    for word, members in found:
+        members.sort(key=lambda i: i.get("order", 9e9))
+        late = sum(1 for m in members if m.get("late"))
+        kinds = {m["kind"] for m in members}
+        soonest = min((m["deadline"] for m in members if m.get("deadline")), default=None)
+        bits = [f"{len(members)} items across {len(kinds)} places"]
+        if late:
+            bits.append(f"{late} late")
+        if soonest:
+            bits.append(f"next {short_when(soonest, now)}")
+        todo = next((m for m in members if m["kind"] == "task"), None)
+        out.append({
+            "id": word, "tint": TINTS[hash(word) % len(TINTS)],
+            "icon": KIND_ICON.get(next(iter(sorted(kinds))), "sparkles"),
+            "title": word.capitalize(),
+            "state": " · ".join(bits) + ".",
+            "clock": short_when(soonest, now) if soonest else "",
+            "do": todo["text"][:40] if todo else "",
+            "ask": f"What's left on {word}?",
+            "more": f"{len(members)} items",
+            "strands": [{"id": m["id"], "icon": KIND_ICON.get(m["kind"], "circle"),
+                         "what": m["text"][:90], "when": m.get("when", ""),
+                         "late": m.get("late", ""), "done": ""} for m in members],
+        })
+    return out, used
+
+
+# ---------------------------------------------------------------------------
+# The day as a shape
+# ---------------------------------------------------------------------------
+
+def day_strip(evs, now):
+    today = [e for e in evs if not e["tomorrow"]]
+    lo, hi = DAY_FROM, DAY_TO
+    for e in today:
+        lo = min(lo, minutes(e["at"]))
+        hi = max(hi, minutes(e["at"]) + e["mins"])
+    blocks, cursor = [], lo
+    for e in today:
+        s, t = max(lo, minutes(e["at"])), 0
+        t = min(hi, s + e["mins"])
+        if s > cursor:
+            interior = any(not b["free"] for b in blocks)
+            blocks.append({"id": f"f{len(blocks)}", "span": str(s - cursor), "free": "1",
+                           "tint": "", "label": gap_label(s - cursor) if interior else ""})
+        if t > s:
+            blocks.append({"id": e["id"], "span": str(t - s), "free": "", "tint": e["tint"],
+                           "label": e["title"]})
+        cursor = max(cursor, t)
+    if hi > cursor:
+        blocks.append({"id": "fz", "span": str(hi - cursor), "free": "1", "tint": "",
+                       "label": ""})
+    pos = min(max(minutes(now), lo), hi)
+    at = {"before": str(pos - lo), "after": str(hi - pos), "label": clock(now)}
+    booked = sum(int(b["span"]) for b in blocks if not b["free"])
+    note = f"{booked // 60}h {booked % 60:02d}m booked" if booked else "nothing booked"
+    biggest = max((int(b["span"]) for b in blocks if b["free"]), default=0)
+    if biggest >= 90:
+        note += f" · {biggest // 60}h clear"
+    return blocks, at, {"from": f"{lo // 60:02d}:{lo % 60:02d}",
+                        "to": f"{hi // 60:02d}:{hi % 60:02d}", "note": note}
+
+
+def gap_label(span):
+    """A gap says how long it is only when it is long enough to matter."""
+    if span < 90:
+        return ""
+    h, m = divmod(span, 60)
+    return f"{h} hours clear" if not m else f"{h}h {m:02d}m clear"
+
+
+# ---------------------------------------------------------------------------
+# What changed
+# ---------------------------------------------------------------------------
+
+def seen_path(user):
+    d = os.path.join(DATA, "seen")
+    os.makedirs(d, exist_ok=True)
+    safe = "".join(c for c in (user or "nobody") if c.isalnum() or c in "-_") or "nobody"
+    return os.path.join(d, f"{safe}.json")
+
+
+def changed_since(user, ids):
+    """How much is new since this person last looked.
+
+    Kept per person, written on every read. The FIRST read of a day says
+    nothing rather than claiming everything is new, because everything being
+    new is true and useless.
+    """
+    with _lock:
+        p = seen_path(user)
+        try:
+            before = json.load(open(p))
+        except Exception:  # noqa: BLE001
+            before = {}
+        known, stamp = set(before.get("ids") or []), before.get("at")
+        fresh = [i for i in ids if i not in known]
+        json.dump({"ids": list(ids)[:400], "at": datetime.now().isoformat(timespec="minutes")},
+                  open(p, "w"))
+        if not known or not fresh:
+            return ""
+        at = (stamp or "")[11:16]
+        return f"{len(fresh)} new since {at}" if at else f"{len(fresh)} new"
+
+
+# ---------------------------------------------------------------------------
+# The payload
+# ---------------------------------------------------------------------------
+
+def payload(grant=None, user=""):
     now = datetime.now(timezone.utc).astimezone()
     act = acting(grant)
-    sources = {"events": events, "tasks": tasks, "notes": notes}
-    got, gaps = {}, []
 
-    # In parallel, and each one's failure is its own. Nothing here can make
-    # another source's block disappear.
+    sources = {"events": events, "tasks": tasks, "notes": notes,
+               "mail": mail, "weather": weather, "house": house}
+    got, gaps = {}, []
     with ThreadPoolExecutor(max_workers=len(sources)) as pool:
         futures = {k: pool.submit(fn, now, act) for k, fn in sources.items()}
         for key, fut in futures.items():
@@ -284,188 +542,131 @@ def payload(grant=None):
             except Exception as e:  # noqa: BLE001
                 gaps.append({"id": key, "what": f"{key.title()} didn't answer — {type(e).__name__}."})
 
-    ev, ta, no = got.get("events", []), got.get("tasks", []), got.get("notes", [])
-    d = {"loaded": "1"}
+    evs = got.get("events", [])
+    tks = got.get("tasks", [])
+    nts = got.get("notes", [])
+    mls = got.get("mail", [])
+
+    d = {"loaded": "1",
+         "greeting": greeting(now),
+         "date_line": now.strftime("%-d %B · week %V"),
+         "keys": [{"id": "k1", "key": "j k", "does": "move through threads"},
+                  {"id": "k2", "key": "e", "does": "tick off"},
+                  {"id": "k3", "key": "/", "does": "ask"}]}
 
     if len(gaps) == len(sources):
-        # Nothing answered: one real state with a way out, and no footer
-        # repeating what the card already says.
         d["nothing_worked"] = "1"
-        # Every source failing for the SAME reason is one fault, not three.
         reasons = list(dict.fromkeys(g["what"].split(" didn't answer — ", 1)[-1] for g in gaps))
         d["why"] = ("Nothing answered: " + reasons[0]) if len(reasons) == 1 \
             else " ".join(g["what"] for g in gaps)
         return d
 
-    if ev:
-        nxt = next((e for e in ev if e["at"] >= now), ev[0])
-        d["next"] = {"lead": lead(nxt["at"], now), "time": nxt["time"],
-                     "title": nxt["title"], "where": nxt["where"],
-                     "icon": "calendar", "tint": nxt["tint"]}
-        d["events"] = [{k: v for k, v in e.items() if k != "at"} for e in ev[:SHOWN]]
-        d["events_note"] = f"{len(ev)} today" if len(ev) <= SHOWN else f"{SHOWN} of {len(ev)}"
-    if ta:
-        d["tasks"] = ta[:SHOWN]
-        over = sum(1 for t in ta if t["overdue"])
-        d["tasks_note"] = (f"{over} late" if over else f"{len(ta)} due") if len(ta) <= SHOWN \
-            else f"{SHOWN} of {len(ta)}"
-    if no:
-        d["notes"] = no[:SHOWN]
+    if got.get("weather"):
+        d["weather"] = got["weather"]
+    if got.get("house"):
+        d["house"] = got["house"]
 
-    if not ev and not ta and not no:
-        if gaps:
-            d["day_line"] = "Partly known"
-            d["day_detail"] = f"{len(sources) - len(gaps)} of {len(sources)} sources answered, and they had nothing."
-        else:
-            d["all_clear"] = "1"
-    elif not ev:
-        d["day_line"] = "Nothing scheduled"
-        d["day_detail"] = "No events on the calendar today."
+    # The day
+    if evs:
+        blocks, at, span = day_strip(evs, now)
+        if blocks:
+            d["strip"], d["at"] = blocks, at
+            d["strip_from"], d["strip_to"], d["strip_note"] = span["from"], span["to"], span["note"]
+        nxt = next((e for e in evs if e["at"] >= now), None) or evs[0]
+        d["now"] = {"lead": lead(nxt["at"], now), "time": clock(nxt["at"]),
+                    "title": nxt["title"],
+                    "where": " · ".join(x for x in (nxt["where"], f"{nxt['mins']}m") if x),
+                    "join": "", "faces": []}
+        rail, today = [], [e for e in evs if not e["tomorrow"]]
+        for i, e in enumerate(today[:SHOWN]):
+            rail.append({"id": e["id"], "time": clock(e["at"]), "title": e["title"],
+                         "tint": e["tint"], "free": "", "what": "",
+                         "done": "1" if e["at"] + timedelta(minutes=e["mins"]) < now else "",
+                         "live": "1" if e["at"] <= now <= e["at"] + timedelta(minutes=e["mins"]) else "",
+                         "last": "1" if i == len(today[:SHOWN]) - 1 else "",
+                         "leave": "", "tight": tight_note(today, i)})
+        if rail:
+            d["rail"] = rail
+            d["rail_note"] = f"{len(today)} today"
+
+    # Subjects
+    items = []
+    for t in tks:
+        items.append({"id": f"t{t['id']}", "kind": "task", "text": t["title"], "when": t["when"],
+                      "late": t["late"], "deadline": None, "order": 0})
+    for m in mls:
+        items.append({"id": m["id"], "kind": "mail", "text": f"{m['who']} — {m['subject']}",
+                      "when": "", "late": "", "deadline": None, "order": 1})
+    for e in evs:
+        items.append({"id": f"e{e['id']}", "kind": "event", "text": e["title"],
+                      "when": clock(e["at"]) + (" tomorrow" if e["tomorrow"] else ""),
+                      "late": "", "deadline": e["at"], "order": 2})
+    for n in nts:
+        items.append({"id": f"n{n['id']}", "kind": "note", "text": n["title"],
+                      "when": n["when"], "late": "", "deadline": None, "order": 3})
+
+    threads, used = build_threads(items, now)
+    if threads:
+        d["threads"] = threads
+        d["threads_note"] = f"{len(threads)} subjects, {sum(len(t['strands']) for t in threads)} items"
+
+    # Whatever no subject claimed, and only what is due
+    loose = [{"id": i["id"], "what": i["text"][:90], "when": i.get("when", ""),
+              "late": i.get("late", ""), "done": "", "icon": KIND_ICON.get(i["kind"], "circle")}
+             for i in items if i["id"] not in used and i["kind"] in ("task", "mail")]
+    if loose:
+        d["loose"] = loose[:SHOWN]
+        d["loose_note"] = f"{min(len(loose), SHOWN)} of {len(loose)}" if len(loose) > SHOWN \
+            else str(len(loose))
+
+    d["suggestions"] = suggestions(threads, tks)
+    note = changed_since(user, [i["id"] for i in items])
+    if note:
+        d["changed"] = note
     if gaps:
         d["gaps"] = gaps
     return d
 
 
+def tight_note(today, i):
+    """Back-to-back is a fact about the day worth drawing."""
+    if i == 0:
+        return ""
+    prev = today[i - 1]
+    gap = int((today[i]["at"] - (prev["at"] + timedelta(minutes=prev["mins"]))).total_seconds() // 60)
+    if 0 <= gap <= 10:
+        return f"Straight after {prev['title'][:28]} — {gap} min" if gap else \
+            f"Straight after {prev['title'][:28]}"
+    return ""
+
+
+def suggestions(threads, tks):
+    out = [{"id": "s0", "text": "What should I do first?"}]
+    for t in threads[:2]:
+        out.append({"id": f"s{t['id']}", "text": f"What's left on {t['title']}?"})
+    if any(t["late"] for t in tks):
+        out.append({"id": "sl", "text": "What's late and why?"})
+    return out[:4]
+
+
+def greeting(now):
+    h = now.hour
+    part = "morning" if h < 12 else ("afternoon" if h < 18 else "evening")
+    return f"{now.strftime('%A')} {part}"
+
+
 # ---------------------------------------------------------------------------
-# The thread
-#
-# `<conversation src=… history=…>` in the markup is the hub's own chat engine
-# pointed at this process: `src` is a WebSocket the app proxy bridges to
-# `/chat` here, `history` an ordinary GET. The element draws nothing — the
-# page's markup draws each turn — so all this has to do is speak the two
-# frames that matter: a `message` in, a `result` out.
-#
-# The proxy stamps the asker's identity and a single-use acting grant on the
-# UPGRADE, exactly as it does on a UI-data request, so a thread can be told
-# whose day it is about.
+# Serving
 # ---------------------------------------------------------------------------
-
-GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-THREADS = os.path.join(os.environ.get("LEO_DATA_DIR", "."), "threads")
-_lock = threading.Lock()
-
-
-def thread_path(user):
-    os.makedirs(THREADS, exist_ok=True)
-    safe = "".join(c for c in (user or "nobody") if c.isalnum() or c in "-_") or "nobody"
-    return os.path.join(THREADS, f"{safe}.json")
-
-
-def transcript(user):
-    try:
-        with open(thread_path(user)) as f:
-            return json.load(f)
-    except Exception:  # noqa: BLE001
-        return []
-
-
-def remember(user, role, text):
-    with _lock:
-        rows = transcript(user)
-        rows.append({"id": f"{role}-{int(time.time() * 1000)}-{len(rows)}",
-                     "role": role, "content": text,
-                     "created_at": datetime.now(timezone.utc).isoformat()})
-        # A glance page's thread is not an archive.
-        rows = rows[-40:]
-        with open(thread_path(user), "w") as f:
-            json.dump(rows, f)
-        return rows
-
-
-def ws_frame(text):
-    """One unmasked text frame, server to client."""
-    data = text.encode()
-    head = bytes([0x81])
-    n = len(data)
-    if n < 126:
-        head += bytes([n])
-    elif n < (1 << 16):
-        head += bytes([126]) + struct.pack(">H", n)
-    else:
-        head += bytes([127]) + struct.pack(">Q", n)
-    return head + data
-
-
-def ws_read(sock):
-    """One frame from the client, or None when it has gone."""
-    def exact(n):
-        buf = b""
-        while len(buf) < n:
-            chunk = sock.recv(n - len(buf))
-            if not chunk:
-                return None
-            buf += chunk
-        return buf
-
-    head = exact(2)
-    if not head:
-        return None
-    opcode = head[0] & 0x0F
-    masked = head[1] & 0x80
-    n = head[1] & 0x7F
-    if n == 126:
-        n = struct.unpack(">H", exact(2))[0]
-    elif n == 127:
-        n = struct.unpack(">Q", exact(8))[0]
-    key = exact(4) if masked else b"\x00\x00\x00\x00"
-    body = exact(n) or b""
-    if masked:
-        body = bytes(b ^ key[i % 4] for i, b in enumerate(body))
-    if opcode == 0x8:  # close
-        return None
-    if opcode in (0x9, 0xA):  # ping / pong — nothing to answer with text
-        return b""
-    return body
-
-
-def day_brief(grant):
-    """What the page is showing, as words the model can answer about."""
-    try:
-        d = payload(grant)
-    except Exception as e:  # noqa: BLE001
-        return f"(today's data could not be read: {type(e).__name__})"
-    parts = []
-    for e in d.get("events", []):
-        parts.append(f"- {e['time']} {e['title']}" + (f" ({e['where']})" if e.get("where") else ""))
-    if parts:
-        parts.insert(0, "On the calendar today:")
-    due = [f"- {t['title']} ({t['due']})" for t in d.get("tasks", [])]
-    if due:
-        parts += ["", "Due or overdue:"] + due
-    notes = [f"- {n['title']}: {n.get('body', '')}" for n in d.get("notes", [])]
-    if notes:
-        parts += ["", "Raised since last night:"] + notes
-    for g in d.get("gaps", []):
-        parts.append(f"(not available: {g['what']})")
-    return "\n".join(parts) or "Nothing on the calendar, nothing due, nothing new."
-
-
-SYSTEM = """You are Leo, answering about the person's day on their Today screen.
-
-The page they are looking at is below. Answer from it. Be brief — one or two
-sentences unless they ask for more, and no preamble. If something they ask
-about is not on the page, say so plainly rather than guessing; a line saying a
-source was unavailable means you do not know, not that there is nothing.
-
-{brief}
-"""
-
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def do_GET(self):  # noqa: N802
         path = self.path.split("?")[0]
-        if path == "/chat" and "websocket" in (self.headers.get("Upgrade") or "").lower():
-            self.talk()
-            return
         if path == "/leo/ui/data":
-            grant = self.headers.get("x-leo-acting-grant")
-            body = json.dumps(payload(grant)).encode()
-        elif path == "/chat/messages":
-            # What `history=` reads: the turns, oldest first, as the chat
-            # engine decodes them (`id`, `role`, `content`, `created_at`).
-            body = json.dumps(transcript(self.headers.get("x-leo-user-id"))).encode()
+            body = json.dumps(payload(self.headers.get("x-leo-acting-grant"),
+                                      self.headers.get("x-leo-user-id") or "")).encode()
         elif path in ("/leo/health", "/health"):
             body = b'{"ok":true}'
         else:
@@ -477,82 +678,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def talk(self):
-        """The thread's socket: a `message` in, a `result` out.
-
-        One turn at a time, in this connection's own thread — the server is a
-        ThreadingHTTPServer, so a long answer blocks nobody else. The grant is
-        read ONCE, at the handshake, because it is single-use; the day it buys
-        is the day this thread is about.
-        """
-        key = self.headers.get("Sec-WebSocket-Key")
-        if not key:
-            self.send_error(400)
-            return
-        accept = base64.b64encode(hashlib.sha1((key + GUID).encode()).digest()).decode()  # noqa: S324
-        self.wfile.write(("HTTP/1.1 101 Switching Protocols\r\n"
-                          "Upgrade: websocket\r\nConnection: Upgrade\r\n"
-                          f"Sec-WebSocket-Accept: {accept}\r\n\r\n").encode())
-        self.wfile.flush()
-
-        user = self.headers.get("x-leo-user-id") or ""
-        brief = day_brief(self.headers.get("x-leo-acting-grant"))
-        sock = self.connection
-        while True:
-            try:
-                raw = ws_read(sock)
-            except Exception:  # noqa: BLE001
-                return
-            if raw is None:
-                return
-            if not raw:
-                continue
-            try:
-                frame = json.loads(raw.decode())
-            except Exception:  # noqa: BLE001
-                continue
-            if frame.get("type") != "message":
-                continue
-            said = (frame.get("content") or "").strip()
-            if not said:
-                continue
-            rows = remember(user, "user", said)
-            turns = [{"role": "assistant" if r["role"] == "assistant" else "user",
-                      "content": r["content"]} for r in rows[-12:]]
-            system = SYSTEM.format(brief=brief)
-            try:
-                try:
-                    answer = ask_claude(system, turns)
-                except urllib.error.HTTPError as e:
-                    # The seed model catalog prices exactly ONE model, so on a
-                    # hub whose `model_catalog` has never been edited the
-                    # household's default is refused: "declares no rate, so a
-                    # call would be billed at $0". `periodic_check` is the work
-                    # class that routes to the `fast` role, which IS the priced
-                    # one — so asking again that way answers rather than
-                    # failing, and the remedy (price your default) stays the
-                    # owner's to apply. Any other refusal is re-raised.
-                    if e.code != 503:
-                        raise
-                    body = e.read().decode()
-                    if "declares no rate" not in body:
-                        raise urllib.error.HTTPError(e.url, e.code, body, e.headers, None)
-                    answer = ask_claude(system, turns, work="periodic_check")
-            except urllib.error.HTTPError as e:
-                detail = (e.read() or b"").decode()[:200] or str(e.reason)
-                # A refusal is the hub's sentence, not a crash: the element
-                # draws `error` and the thread stays open.
-                sock.sendall(ws_frame(json.dumps(
-                    {"type": "error", "message": f"the hub refused the model call ({e.code}): {detail}"})))
-                continue
-            except Exception as e:  # noqa: BLE001
-                sock.sendall(ws_frame(json.dumps(
-                    {"type": "error", "message": f"{type(e).__name__}: {e}"})))
-                continue
-            remember(user, "assistant", answer)
-            sock.sendall(ws_frame(json.dumps({"type": "result", "content": answer})))
-
-    def log_message(self, *a):  # the unit's journal is noisy enough
+    def log_message(self, *a):
         pass
 
 
