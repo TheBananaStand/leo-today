@@ -1,0 +1,63 @@
+{
+  "name": "today",
+  "label": "Today",
+  "description": "What today holds, at a glance \u2014 the next thing, what is due, what is worth knowing.",
+  "details": "One page assembled from whatever this hub can answer: the calendar, reminders and the feed. Every block is gated on having something in it, so the page is as long as the day is busy. Each source is fetched on its own \u2014 one that fails or times out leaves its block off the page and a line at the foot saying so, rather than taking the page down.",
+  "setup_hint": "Nothing to set up. Enable it and open Today.",
+  "use_cases": [
+    "What does my day look like?",
+    "What's overdue?"
+  ],
+  "icon": "sun.max",
+  "category": "package",
+  "kind": "app",
+  "default_enabled": false,
+  "pages": [
+    {
+      "path": "today",
+      "label": "Today",
+      "icon": "sun.max",
+      "show_in_nav": true
+    }
+  ],
+  "ui": {
+    "today": {
+      "kind": "html",
+      "html": "<div id=\"today\" subset=\"6\" class=\"h-full flex flex-col overflow-y-auto bg-canvas\">\n\n  <!-- ONE ROW FORM PER KIND, written once and stamped. The whole page is\n       three of these plus one shell repeated verbatim, which is what makes\n       a block that arrived this morning look like one that has been here\n       for months. -->\n\n  <!-- An event: the time in a fixed gutter so every row's title starts at\n       the same x, whatever the clock says. The calendar's hue is on the\n       dot and nowhere else \u2014 figures wear ink. -->\n  <template name=\"event\">\n    <li id=\"ev-{e.id}\" class=\"flex items-center gap-3 h-12 px-4 border-b\">\n      <span class=\"w-14 shrink-0 text-sm font-medium tabular-nums\">{e.time}</span>\n      <span tint=\"{e.tint}\" aria-label=\"{e.calendar}\" class=\"size-2 shrink-0 rounded-full bg-tint\"></span>\n      <span class=\"flex-1 min-w-0 text-sm truncate\">{e.title}</span>\n      <span class=\"w-24 shrink-0 text-xs text-muted text-right truncate\">{e.where}</span>\n      <span if=\"e.now\" class=\"shrink-0 px-2 py-0.5 rounded-full text-xs font-medium bg-accent-wash text-accent\">Now</span>\n    </li>\n  </template>\n\n  <!-- A thing to do: the tick saves itself, so the row is the whole\n       interaction. Overdue is the one place danger is spent on this page. -->\n  <template name=\"task\">\n    <li id=\"task-{t.id}\" class=\"flex items-center gap-3 min-h-12 px-4 border-b\">\n      <!-- The title is INSIDE the label, so the whole row is the hit\n           target and the tick has a name to be read out. A 44pt box around\n           the control is the minimum either way. -->\n      <label class=\"flex items-center gap-3 flex-1 min-w-0\">\n        <span class=\"flex items-center justify-center shrink-0 size-11 -ml-2\">\n          <input type=\"checkbox\" checked=\"{t.done}\" change=\"complete\" args=\"id={t.id}\">\n        </span>\n        <span class=\"flex-1 min-w-0 text-sm line-clamp-2\">{t.title}</span>\n      </label>\n      <span if=\"t.overdue\" class=\"shrink-0 px-2 py-0.5 rounded-full text-xs font-medium bg-danger text-danger tabular-nums\">{t.due}</span>\n      <span if=\"!t.overdue\" class=\"shrink-0 text-xs text-muted tabular-nums\">{t.due}</span>\n    </li>\n  </template>\n\n  <!-- Something worth knowing: a kind, a claim, and two lines of why. The\n       hue is the kind's, carried by the glyph. -->\n  <template name=\"note\">\n    <li id=\"note-{n.id}\" class=\"flex gap-3 px-4 py-3 border-b\">\n      <img icon=\"{n.icon}\" alt=\"\" tint=\"{n.tint}\" class=\"size-4 mt-0.5 shrink-0 text-tint\">\n      <div class=\"flex flex-col gap-1 min-w-0 flex-1\">\n        <span class=\"text-sm font-medium line-clamp-2\">{n.title}</span>\n        <span if=\"n.body\" class=\"text-xs text-secondary line-clamp-2\">{n.body}</span>\n      </div>\n      <span class=\"shrink-0 text-xs text-muted\">{n.when}</span>\n    </li>\n  </template>\n\n  <div class=\"flex flex-col gap-6 w-full max-w-2xl mx-auto px-5 py-7 md:px-8\">\n\n    <!-- Nothing has arrived yet. It claims nothing about the day: three\n         bars where the three blocks will be. -->\n    <div if=\"!loaded\" class=\"flex flex-col gap-6\">\n      <div class=\"h-28 rounded-2xl bg-surface animate-pulse\"></div>\n      <div class=\"h-40 rounded-2xl bg-surface animate-pulse\"></div>\n      <div class=\"h-32 rounded-2xl bg-surface animate-pulse\"></div>\n    </div>\n\n    <div if=\"loaded\" class=\"flex flex-col gap-6\">\n\n      <!-- THE ONE MOST IMPORTANT THING: what happens next. A headline\n           number stands alone, so the time is proportional rather than\n           tabular. -->\n      <header if=\"next\" id=\"next-up\" class=\"flex items-start gap-5 p-5 rounded-2xl bg-surface\">\n        <div class=\"flex flex-col gap-0.5 min-w-0 flex-1\">\n          <span class=\"text-xs text-muted uppercase\">{next.lead}</span>\n          <span class=\"text-4xl font-bold\">{next.time}</span>\n          <span class=\"text-base text-secondary line-clamp-2\">{next.title}</span>\n          <span if=\"next.where\" class=\"text-sm text-muted truncate\">{next.where}</span>\n        </div>\n        <img icon=\"{next.icon}\" alt=\"\" tint=\"{next.tint}\" class=\"size-12 shrink-0 text-tint\">\n      </header>\n\n      <!-- Nothing next, but the day is not empty: say what it is instead\n           of leaving the top of the page blank. -->\n      <header if=\"day_line\" id=\"day-line\" class=\"flex items-center gap-4 p-5 rounded-2xl bg-surface\">\n        <img icon=\"sun.max\" alt=\"\" tint=\"amber\" class=\"size-8 shrink-0 text-tint\">\n        <div class=\"flex flex-col gap-0.5 min-w-0\">\n          <span class=\"text-lg font-semibold\">{day_line}</span>\n          <span if=\"day_detail\" class=\"text-sm text-muted line-clamp-2\">{day_detail}</span>\n        </div>\n      </header>\n\n      <!-- NOTHING answered. A partial failure is the quiet footer at the\n           foot of this page; this is the other case, and it gets a real\n           state with a way out rather than a blank page with a footnote. -->\n      <div if=\"nothing_worked\" id=\"unreachable\" class=\"flex flex-col items-center gap-3 py-16 rounded-2xl bg-surface\">\n        <img icon=\"wifi.exclamationmark\" alt=\"\" class=\"size-12 text-muted\">\n        <span class=\"text-lg font-semibold\">Couldn't put today together</span>\n        <span class=\"max-w-prose px-6 text-sm text-muted text-center line-clamp-3\">{why}</span>\n        <a id=\"retry\" action=\"refresh\" class=\"mt-1 h-11 px-5 flex items-center rounded-lg text-sm font-medium bg-elevated\">Try again</a>\n      </div>\n\n      <section if=\"events\" id=\"schedule\" class=\"flex flex-col gap-3\">\n        <div class=\"flex items-end justify-between gap-4\">\n          <h2 class=\"text-xs font-semibold text-muted uppercase\">On today</h2>\n          <span class=\"text-xs text-muted tabular-nums\">{events_note}</span>\n        </div>\n        <ul class=\"flex flex-col rounded-2xl bg-surface overflow-hidden\">\n          <use template=\"event\" each=\"e in events\"></use>\n        </ul>\n      </section>\n\n      <section if=\"tasks\" id=\"needs-doing\" class=\"flex flex-col gap-3\">\n        <div class=\"flex items-end justify-between gap-4\">\n          <h2 class=\"text-xs font-semibold text-muted uppercase\">Needs doing</h2>\n          <span class=\"text-xs text-muted tabular-nums\">{tasks_note}</span>\n        </div>\n        <ul class=\"flex flex-col rounded-2xl bg-surface overflow-hidden\">\n          <use template=\"task\" each=\"t in tasks\"></use>\n        </ul>\n      </section>\n\n      <section if=\"notes\" id=\"worth-knowing\" class=\"flex flex-col gap-3\">\n        <h2 class=\"text-xs font-semibold text-muted uppercase\">Worth knowing</h2>\n        <ul class=\"flex flex-col rounded-2xl bg-surface overflow-hidden\">\n          <use template=\"note\" each=\"n in notes\"></use>\n        </ul>\n      </section>\n\n      <!-- Every block is gated on having something in it, so a quiet day\n           would be a blank page. This is the page on a quiet day, and it\n           says WHY it is empty in the screen's own nouns. -->\n      <div if=\"all_clear\" id=\"all-clear\" class=\"flex flex-col items-center gap-3 py-16 rounded-2xl border-2 border-dashed border-muted\">\n        <img icon=\"checkmark.circle\" alt=\"\" tint=\"green\" class=\"size-12 text-tint\">\n        <span class=\"text-lg font-semibold\">Nothing on today</span>\n        <span class=\"max-w-prose px-6 text-sm text-muted text-center\">No events, nothing due and nothing new since you last looked.</span>\n      </div>\n\n      <!-- A source that did not answer is a LINE, not a broken page. The\n           blocks above are simply absent; this says which and why, so an\n           empty page is never mistaken for a quiet day. -->\n      <footer if=\"gaps\" id=\"gaps\" class=\"flex flex-col gap-2 pt-2\">\n        <div each=\"g in gaps\" id=\"gap-{g.id}\" class=\"flex items-center gap-2\">\n          <img icon=\"exclamationmark.triangle\" alt=\"\" tint=\"amber\" class=\"size-3.5 shrink-0 text-tint\">\n          <span class=\"text-xs text-muted line-clamp-2\">{g.what}</span>\n        </div>\n      </footer>\n\n    </div>\n  </div>\n</div>\n",
+      "title": "Today",
+      "refreshOn": [
+        "reminders",
+        "feed",
+        "calendar"
+      ],
+      "actions": {
+        "complete": {
+          "method": "PATCH",
+          "path": "/api/reminders/items/{args.id}/toggle",
+          "body": {},
+          "refresh": "reload"
+        },
+        "refresh": {
+          "method": "GET",
+          "path": "/api/packages/today/ui/data",
+          "refresh": "reload"
+        }
+      }
+    }
+  },
+  "entitlements": {
+    "graph_scopes": [
+      "calendar:read",
+      "reminders:read",
+      "feed:read"
+    ]
+  },
+  "app": {
+    "repo": "https://github.com/TheBananaStand/leo-today",
+    "branch": "main",
+    "build": "make",
+    "bin": "leo-today",
+    "port": 8477,
+    "supervised": false
+  }
+}

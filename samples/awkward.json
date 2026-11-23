@@ -1,0 +1,357 @@
+{
+ "loaded": "1",
+ "next": {
+  "lead": "Now",
+  "time": "7:00",
+  "title": "A meeting whose title runs on and on and will not fit in the row it is given",
+  "where": "Somewhere with a very long room name indeed",
+  "icon": "person.2",
+  "tint": "blue"
+ },
+ "events_note": "6 events",
+ "events": [
+  {
+   "id": "e0",
+   "time": "7:00",
+   "title": "A meeting whose title runs on and on and will not fit in the row it is given, no matter how wide the window",
+   "where": "Somewhere with a very long room name indeed",
+   "tint": "blue",
+   "now": "1"
+  },
+  {
+   "id": "e1",
+   "time": "7:30",
+   "title": "A meeting whose title runs on and on and will not fit in the row it is given, no matter how wide the window",
+   "where": "Somewhere with a very long room name indeed",
+   "tint": "blue",
+   "now": ""
+  },
+  {
+   "id": "e2",
+   "time": "8:00",
+   "title": "A meeting whose title runs on and on and will not fit in the row it is given, no matter how wide the window",
+   "where": "Somewhere with a very long room name indeed",
+   "tint": "blue",
+   "now": ""
+  },
+  {
+   "id": "e3",
+   "time": "8:30",
+   "title": "A meeting whose title runs on and on and will not fit in the row it is given, no matter how wide the window",
+   "where": "Somewhere with a very long room name indeed",
+   "tint": "blue",
+   "now": ""
+  },
+  {
+   "id": "e4",
+   "time": "9:00",
+   "title": "A meeting whose title runs on and on and will not fit in the row it is given, no matter how wide the window",
+   "where": "Somewhere with a very long room name indeed",
+   "tint": "blue",
+   "now": ""
+  },
+  {
+   "id": "e5",
+   "time": "9:30",
+   "title": "A meeting whose title runs on and on and will not fit in the row it is given, no matter how wide the window",
+   "where": "Somewhere with a very long room name indeed",
+   "tint": "blue",
+   "now": ""
+  }
+ ],
+ "tasks_note": "40 of 40",
+ "tasks": [
+  {
+   "id": "t0",
+   "title": "Chase the vendor about the replacement part that was supposed to arrive a fortnight ago and has not",
+   "due": "4 days late",
+   "overdue": "1",
+   "done": ""
+  },
+  {
+   "id": "t1",
+   "title": "Task number 1 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t2",
+   "title": "Task number 2 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t3",
+   "title": "Task number 3 with a perfectly ordinary name",
+   "due": "4 days late",
+   "overdue": "1",
+   "done": ""
+  },
+  {
+   "id": "t4",
+   "title": "Task number 4 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t5",
+   "title": "Task number 5 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t6",
+   "title": "Task number 6 with a perfectly ordinary name",
+   "due": "4 days late",
+   "overdue": "1",
+   "done": ""
+  },
+  {
+   "id": "t7",
+   "title": "Task number 7 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t8",
+   "title": "Task number 8 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t9",
+   "title": "Task number 9 with a perfectly ordinary name",
+   "due": "4 days late",
+   "overdue": "1",
+   "done": ""
+  },
+  {
+   "id": "t10",
+   "title": "Task number 10 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t11",
+   "title": "Task number 11 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t12",
+   "title": "Task number 12 with a perfectly ordinary name",
+   "due": "4 days late",
+   "overdue": "1",
+   "done": ""
+  },
+  {
+   "id": "t13",
+   "title": "Task number 13 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t14",
+   "title": "Task number 14 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t15",
+   "title": "Task number 15 with a perfectly ordinary name",
+   "due": "4 days late",
+   "overdue": "1",
+   "done": ""
+  },
+  {
+   "id": "t16",
+   "title": "Task number 16 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t17",
+   "title": "Task number 17 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t18",
+   "title": "Task number 18 with a perfectly ordinary name",
+   "due": "4 days late",
+   "overdue": "1",
+   "done": ""
+  },
+  {
+   "id": "t19",
+   "title": "Task number 19 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t20",
+   "title": "Task number 20 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t21",
+   "title": "Task number 21 with a perfectly ordinary name",
+   "due": "4 days late",
+   "overdue": "1",
+   "done": ""
+  },
+  {
+   "id": "t22",
+   "title": "Task number 22 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t23",
+   "title": "Task number 23 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t24",
+   "title": "Task number 24 with a perfectly ordinary name",
+   "due": "4 days late",
+   "overdue": "1",
+   "done": ""
+  },
+  {
+   "id": "t25",
+   "title": "Task number 25 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t26",
+   "title": "Task number 26 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t27",
+   "title": "Task number 27 with a perfectly ordinary name",
+   "due": "4 days late",
+   "overdue": "1",
+   "done": ""
+  },
+  {
+   "id": "t28",
+   "title": "Task number 28 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t29",
+   "title": "Task number 29 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t30",
+   "title": "Task number 30 with a perfectly ordinary name",
+   "due": "4 days late",
+   "overdue": "1",
+   "done": ""
+  },
+  {
+   "id": "t31",
+   "title": "Task number 31 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t32",
+   "title": "Task number 32 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t33",
+   "title": "Task number 33 with a perfectly ordinary name",
+   "due": "4 days late",
+   "overdue": "1",
+   "done": ""
+  },
+  {
+   "id": "t34",
+   "title": "Task number 34 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t35",
+   "title": "Task number 35 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t36",
+   "title": "Task number 36 with a perfectly ordinary name",
+   "due": "4 days late",
+   "overdue": "1",
+   "done": ""
+  },
+  {
+   "id": "t37",
+   "title": "Task number 37 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t38",
+   "title": "Task number 38 with a perfectly ordinary name",
+   "due": "Today",
+   "overdue": "",
+   "done": ""
+  },
+  {
+   "id": "t39",
+   "title": "Task number 39 with a perfectly ordinary name",
+   "due": "4 days late",
+   "overdue": "1",
+   "done": ""
+  }
+ ],
+ "notes": [
+  {
+   "id": "n1",
+   "icon": "newspaper",
+   "tint": "blue",
+   "title": "A headline that is itself much too long to sit on one line and so must be clamped",
+   "body": "A body that goes on for a good while longer than two lines would ever allow, which is the point of the test: it must clamp rather than push the row open to an unbounded height. And on it goes.",
+   "when": "5:30"
+  }
+ ],
+ "all_clear": "",
+ "gaps": []
+}

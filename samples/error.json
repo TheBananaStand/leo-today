@@ -1,0 +1,5 @@
+{ "loaded": "1", "nothing_worked": "1",
+  "why": "The hub answered 403 for calendar:read — this package's token is missing that scope. Reminders and the feed timed out.",
+  "events": [], "tasks": [], "notes": [],
+  "gaps": [ { "id": "calendar", "what": "Calendar didn't answer — 403, scope calendar:read." },
+            { "id": "reminders", "what": "Reminders didn't answer (timed out after 2s)." } ] }

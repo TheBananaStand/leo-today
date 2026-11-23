@@ -1,0 +1,278 @@
+#!/usr/bin/env python3
+"""Today — the payload behind the Today screen.
+
+A Leo "app" package: its own process, reached by the hub at
+`GET /leo/ui/data`, which is what the Today screen's `{path}`s bind to.
+
+It holds no model and no schedule. Everything it does is fetch a handful of
+hub domains over the Graph and shape them into the ONE payload the markup
+reads. The markup decides nothing about what is on the page: a block whose
+list is empty is absent, because an empty array is falsy in the language.
+
+The rule the error handling follows, and the reason this is worth reading:
+EVERY SOURCE FAILS ON ITS OWN. A source that errors, times out, or that this
+package's token may not reach leaves its key missing — so its block is simply
+not on the page, the other blocks are unaffected, and the footer says which
+one did not answer. A page that is down whenever any one package is down is
+not a page you would keep open.
+"""
+
+import json
+import os
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+API = os.environ.get("LEO_API_URL", "http://127.0.0.1:8420").rstrip("/")
+TOKEN = os.environ.get("LEO_PACKAGE_TOKEN", "")
+PORT = int(os.environ.get("PORT") or os.environ.get("LEO_APP_PORT") or "8477")
+
+# A source gets this long and no longer. The page is a glance: four sources
+# answering in parallel means the slowest one is the wait, so the budget is
+# per-source and small rather than one clock around the lot.
+TIMEOUT = 2.5
+# What a glance shows. The cap is HERE and not in the markup: 40 rows laid
+# out is 2691pt of scroll, which is a list, not a glance. The count beside
+# the heading is what says there are more.
+SHOWN = 5
+
+TINTS = ["blue", "purple", "teal", "orange", "green", "pink", "amber", "red"]
+
+
+class Gap(Exception):
+    """A source did not answer. Carries what to tell the reader."""
+
+
+def graph(path, **params):
+    """One Graph GET. Raises Gap with a sentence a person can read."""
+    if not TOKEN:
+        raise Gap("this package has no Graph credential — reinstall it so the hub mints one")
+    url = f"{API}/graph/v1/{path}"
+    if params:
+        url += "?" + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {TOKEN}"})
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            return json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()[:200]
+        if e.code == 403:
+            raise Gap(f"the hub refused it (403) — a scope is missing: {body}") from None
+        if e.code == 501:
+            raise Gap("this hub does not serve that route") from None
+        raise Gap(f"the hub answered {e.code}") from None
+    except TimeoutError:
+        raise Gap(f"it timed out after {TIMEOUT:g}s") from None
+    except Exception as e:  # noqa: BLE001 — a source never takes the page down
+        raise Gap(f"{type(e).__name__}: {e}") from None
+
+
+def rows(v, *keys):
+    """The list inside a Graph answer, whatever it wrapped it in."""
+    if isinstance(v, list):
+        return v
+    if isinstance(v, dict):
+        for k in keys:
+            if isinstance(v.get(k), list):
+                return v[k]
+        for val in v.values():
+            if isinstance(val, list):
+                return val
+    return []
+
+
+def clock(ts):
+    """`2026-11-24T09:30:00Z` -> `9:30`, in this box's own timezone."""
+    try:
+        t = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+        return t.astimezone().strftime("%-I:%M")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def when(ts):
+    try:
+        return datetime.fromisoformat(str(ts).replace("Z", "+00:00")).astimezone()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def lead(start, now):
+    """How far off a thing is, as a person would say it."""
+    mins = int((start - now).total_seconds() // 60)
+    if mins < -1:
+        return "Started"
+    if mins <= 1:
+        return "Now"
+    if mins < 60:
+        return f"In {mins} minutes"
+    if mins < 180:
+        h, m = divmod(mins, 60)
+        return f"In {h}h {m:02d}m" if m else f"In {h} hours"
+    return start.strftime("At %-I:%M")
+
+
+def events(now):
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    raw = rows(graph("calendar/events",
+                     start=start.isoformat(),
+                     end=(start + timedelta(days=1)).isoformat()), "events", "items")
+    out = []
+    for e in raw:
+        t = when(e.get("start") or e.get("start_at") or e.get("starts_at"))
+        if not t or t < now - timedelta(hours=2):
+            continue
+        cal = str(e.get("calendar") or e.get("calendar_name") or "")
+        out.append({
+            "id": str(e.get("id") or len(out)),
+            "at": t,
+            "time": clock(e.get("start") or e.get("start_at") or e.get("starts_at")),
+            "title": str(e.get("title") or e.get("summary") or "Untitled"),
+            "where": str(e.get("location") or "")[:60],
+            "calendar": cal,
+            "tint": TINTS[hash(cal) % len(TINTS)] if cal else "blue",
+            "now": "1" if t <= now <= t + timedelta(minutes=int(e.get("duration_min") or 60)) else "",
+        })
+    out.sort(key=lambda r: r["at"])
+    return out
+
+
+def tasks(now):
+    raw = rows(graph("reminders/items", active_only="true"), "items", "reminders")
+    today = now.date()
+    out = []
+    for r in raw:
+        if r.get("completed") or r.get("done"):
+            continue
+        due = when(r.get("due") or r.get("due_at") or r.get("due_date"))
+        if not due:
+            continue
+        d = due.date()
+        if d > today:
+            continue  # today and overdue only — this is Today, not everything
+        late = (today - d).days
+        out.append({
+            "id": str(r.get("id") or len(out)),
+            "late": late,
+            "title": str(r.get("title") or "Untitled"),
+            "due": "Today" if late == 0 else ("Yesterday" if late == 1 else f"{late} days late"),
+            "overdue": "1" if late > 0 else "",
+            "done": "",
+        })
+    out.sort(key=lambda r: -r["late"])
+    return out
+
+
+ICONS = {"alert": ("exclamationmark.triangle", "amber"),
+         "recommendation": ("lightbulb", "teal"),
+         "action_taken": ("checkmark.circle", "green"),
+         "briefing": ("doc.text", "blue")}
+
+
+def notes(now):
+    raw = rows(graph("feed/items", limit="20"), "items", "feed")
+    out = []
+    for n in raw:
+        if n.get("dismissed") or n.get("deleted_at"):
+            continue
+        t = when(n.get("created_at") or n.get("created"))
+        if t and (now - t) > timedelta(hours=18):
+            continue
+        icon, tint = ICONS.get(str(n.get("feed_type") or ""), ("sparkles", "purple"))
+        out.append({
+            "id": str(n.get("id") or len(out)),
+            "icon": icon, "tint": tint,
+            "title": str(n.get("title") or "Untitled"),
+            "body": str(n.get("chat_summary") or n.get("body") or "")[:240],
+            "when": clock(n.get("created_at") or n.get("created")),
+        })
+    return out
+
+
+def payload():
+    now = datetime.now(timezone.utc).astimezone()
+    sources = {"events": events, "tasks": tasks, "notes": notes}
+    got, gaps = {}, []
+
+    # In parallel, and each one's failure is its own. Nothing here can make
+    # another source's block disappear.
+    with ThreadPoolExecutor(max_workers=len(sources)) as pool:
+        futures = {k: pool.submit(fn, now) for k, fn in sources.items()}
+        for key, fut in futures.items():
+            try:
+                got[key] = fut.result()
+            except Gap as g:
+                gaps.append({"id": key, "what": f"{key.title()} didn't answer — {g}."})
+            except Exception as e:  # noqa: BLE001
+                gaps.append({"id": key, "what": f"{key.title()} didn't answer — {type(e).__name__}."})
+
+    ev, ta, no = got.get("events", []), got.get("tasks", []), got.get("notes", [])
+    d = {"loaded": "1"}
+
+    if len(gaps) == len(sources):
+        # Nothing answered: one real state with a way out, and no footer
+        # repeating what the card already says.
+        d["nothing_worked"] = "1"
+        d["why"] = " ".join(g["what"] for g in gaps)
+        return d
+
+    if ev:
+        nxt = next((e for e in ev if e["at"] >= now), ev[0])
+        d["next"] = {"lead": lead(nxt["at"], now), "time": nxt["time"],
+                     "title": nxt["title"], "where": nxt["where"],
+                     "icon": "calendar", "tint": nxt["tint"]}
+        d["events"] = [{k: v for k, v in e.items() if k != "at"} for e in ev[:SHOWN]]
+        d["events_note"] = f"{len(ev)} today" if len(ev) <= SHOWN else f"{SHOWN} of {len(ev)}"
+    if ta:
+        d["tasks"] = ta[:SHOWN]
+        over = sum(1 for t in ta if t["overdue"])
+        d["tasks_note"] = (f"{over} late" if over else f"{len(ta)} due") if len(ta) <= SHOWN \
+            else f"{SHOWN} of {len(ta)}"
+    if no:
+        d["notes"] = no[:SHOWN]
+
+    if not ev and not ta and not no:
+        if gaps:
+            d["day_line"] = "Partly known"
+            d["day_detail"] = f"{len(sources) - len(gaps)} of {len(sources)} sources answered, and they had nothing."
+        else:
+            d["all_clear"] = "1"
+    elif not ev:
+        d["day_line"] = "Nothing scheduled"
+        d["day_detail"] = "No events on the calendar today."
+    if gaps:
+        d["gaps"] = gaps
+    return d
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):  # noqa: N802
+        path = self.path.split("?")[0]
+        if path == "/leo/ui/data":
+            body = json.dumps(payload()).encode()
+        elif path in ("/leo/health", "/health"):
+            body = b'{"ok":true}'
+        else:
+            self.send_error(404)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *a):  # the unit's journal is noisy enough
+        pass
+
+
+def main():
+    print(f"today: serving /leo/ui/data on :{PORT}, hub at {API}", flush=True)
+    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+
+
+if __name__ == "__main__":
+    main()
