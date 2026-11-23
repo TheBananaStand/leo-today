@@ -1,6 +1,7 @@
 {
  "greeting": "Monday morning",
  "date_line": "24 November \u00b7 week 48",
+ "changed": "3 new since 07:02",
  "weather": {
   "symbol": "cloud.sun",
   "condition": "Partly cloudy",
@@ -8,18 +9,91 @@
   "temp": "9\u00b0",
   "range": "4\u00b0 / 12\u00b0"
  },
- "arc": {
-  "start": "07:00",
-  "end": "19:00",
-  "done": "34",
-  "left": "66"
+ "strip_from": "07:00",
+ "strip_to": "19:00",
+ "strip_note": "5h 10m booked \u00b7 2h clear at noon",
+ "at": {
+  "before": "125",
+  "after": "595",
+  "label": "9:05"
  },
+ "strip": [
+  {
+   "id": "f1",
+   "span": "60",
+   "tint": "",
+   "label": "",
+   "free": "1"
+  },
+  {
+   "id": "e1",
+   "span": "45",
+   "tint": "green",
+   "label": "Gym",
+   "free": ""
+  },
+  {
+   "id": "f2",
+   "span": "45",
+   "tint": "",
+   "label": "",
+   "free": "1"
+  },
+  {
+   "id": "e2",
+   "span": "30",
+   "tint": "blue",
+   "label": "Standup",
+   "free": ""
+  },
+  {
+   "id": "f3",
+   "span": "60",
+   "tint": "",
+   "label": "",
+   "free": "1"
+  },
+  {
+   "id": "e3",
+   "span": "60",
+   "tint": "teal",
+   "label": "Dentist",
+   "free": ""
+  },
+  {
+   "id": "f4",
+   "span": "120",
+   "tint": "",
+   "label": "2 hours clear",
+   "free": "1"
+  },
+  {
+   "id": "e4",
+   "span": "120",
+   "tint": "purple",
+   "label": "Quarterly review",
+   "free": ""
+  },
+  {
+   "id": "f5",
+   "span": "150",
+   "tint": "",
+   "label": "",
+   "free": "1"
+  },
+  {
+   "id": "e5",
+   "span": "30",
+   "tint": "orange",
+   "label": "Dinner",
+   "free": ""
+  }
+ ],
  "now": {
   "lead": "In 25 minutes",
   "time": "9:30",
   "title": "Standup with the build team",
-  "where": "Zoom \u00b7 recurring",
-  "who": "4 people",
+  "where": "Zoom \u00b7 30m",
   "join": "Join",
   "faces": [
    {
@@ -39,187 +113,221 @@
    }
   ]
  },
- "rail_note": "4 events \u00b7 5h 10m booked",
+ "threads_note": "3 subjects, 9 items",
+ "threads": [
+  {
+   "id": "austin",
+   "tint": "blue",
+   "icon": "airplane",
+   "title": "The Austin trip",
+   "clock": "17h",
+   "state": "You fly at 8:00 tomorrow and two of the four things aren't done.",
+   "do": "Book the flights",
+   "ask": "Draft Maya the dates",
+   "more": "4 items",
+   "strands": [
+    {
+     "id": "a1",
+     "icon": "checkmark.square",
+     "what": "Renew the passport",
+     "when": "4 days late",
+     "late": "1",
+     "done": ""
+    },
+    {
+     "id": "a2",
+     "icon": "checkmark.square",
+     "what": "Book the flights",
+     "when": "Today",
+     "late": "",
+     "done": ""
+    },
+    {
+     "id": "a3",
+     "icon": "envelope",
+     "what": "Maya asked for your dates \u2014 twice",
+     "when": "2d",
+     "late": "",
+     "done": ""
+    },
+    {
+     "id": "a4",
+     "icon": "calendar",
+     "what": "Flight to Austin \u00b7 gate C14",
+     "when": "8:00",
+     "late": "",
+     "done": ""
+    }
+   ]
+  },
+  {
+   "id": "q4",
+   "tint": "amber",
+   "icon": "doc.text",
+   "title": "Q4 close",
+   "clock": "Today",
+   "state": "Accounting has asked twice. Your only clear stretch is 12:00\u201314:00.",
+   "do": "Open the numbers",
+   "ask": "What exactly do they need?",
+   "more": "3 items",
+   "strands": [
+    {
+     "id": "q1",
+     "icon": "checkmark.square",
+     "what": "Send the Q4 numbers to accounting",
+     "when": "Today",
+     "late": "",
+     "done": ""
+    },
+    {
+     "id": "q2",
+     "icon": "envelope",
+     "what": "Accounting \u2014 Q4 close",
+     "when": "1d",
+     "late": "",
+     "done": ""
+    },
+    {
+     "id": "q3",
+     "icon": "calendar",
+     "what": "Quarterly review",
+     "when": "14:00",
+     "late": "",
+     "done": ""
+    }
+   ]
+  },
+  {
+   "id": "lease",
+   "tint": "teal",
+   "icon": "house",
+   "title": "The lease",
+   "clock": "Fri",
+   "state": "The landlord wants an answer by Friday; nothing has been decided.",
+   "do": "Reply to the landlord",
+   "ask": "",
+   "more": "2 items",
+   "strands": [
+    {
+     "id": "l1",
+     "icon": "envelope",
+     "what": "Landlord \u2014 renewal terms",
+     "when": "3d",
+     "late": "",
+     "done": ""
+    },
+    {
+     "id": "l2",
+     "icon": "checkmark.square",
+     "what": "Decide: renew or move",
+     "when": "Tomorrow",
+     "late": "",
+     "done": ""
+    }
+   ]
+  }
+ ],
+ "loose_note": "3 of 11",
+ "loose": [
+  {
+   "id": "x1",
+   "icon": "checkmark.square",
+   "what": "Fix the light switch \u2014 it's upside down",
+   "when": "155 days late",
+   "late": "1",
+   "done": ""
+  },
+  {
+   "id": "x2",
+   "icon": "trash",
+   "what": "Bins out tonight \u2014 recycling week",
+   "when": "Tonight",
+   "late": "",
+   "done": ""
+  },
+  {
+   "id": "x3",
+   "icon": "message",
+   "what": "Steph: \"did you call the dentist back?\"",
+   "when": "7:40",
+   "late": "",
+   "done": ""
+  }
+ ],
+ "rail_note": "4 events",
  "rail": [
   {
    "id": "1",
    "time": "8:00",
    "title": "Gym",
-   "where": "",
-   "len": "45m",
    "tint": "green",
-   "live": "",
    "done": "1",
+   "live": "",
    "free": "",
    "last": "",
    "leave": "",
-   "faces": []
+   "tight": ""
   },
   {
    "id": "2",
    "time": "9:30",
-   "title": "Standup with the build team",
-   "where": "Zoom",
-   "len": "30m",
+   "title": "Standup",
    "tint": "blue",
-   "live": "1",
    "done": "",
+   "live": "1",
    "free": "",
    "last": "",
    "leave": "",
-   "faces": [
-    {
-     "id": "a",
-     "initials": "MK",
-     "tint": "blue"
-    },
-    {
-     "id": "b",
-     "initials": "SR",
-     "tint": "purple"
-    },
-    {
-     "id": "c",
-     "initials": "JT",
-     "tint": "teal"
-    }
-   ]
+   "tight": ""
   },
   {
    "id": "3",
    "time": "11:00",
    "title": "Dentist",
-   "where": "Dr. Alvarez \u00b7 2.4 mi",
-   "len": "1h",
    "tint": "teal",
-   "live": "",
    "done": "",
+   "live": "",
    "free": "",
    "last": "",
    "leave": "Leave 10:38 \u00b7 12 min drive",
-   "faces": []
+   "tight": ""
   },
   {
-   "id": "g1",
+   "id": "g",
    "time": "12:00",
    "free": "1",
-   "what": "2 hours clear \u2014 the only real stretch today",
+   "what": "2 hours clear \u2014 the only real stretch",
    "last": "",
    "tint": "",
-   "live": "",
    "done": "",
+   "live": "",
    "leave": "",
-   "faces": [],
-   "title": "",
-   "where": "",
-   "len": ""
+   "tight": "",
+   "title": ""
   },
   {
    "id": "4",
    "time": "14:00",
    "title": "Quarterly review",
-   "where": "Conference room",
-   "len": "2h",
    "tint": "purple",
-   "live": "",
    "done": "",
+   "live": "",
    "free": "",
    "last": "",
    "leave": "",
-   "faces": [
-    {
-     "id": "d",
-     "initials": "AL",
-     "tint": "orange"
-    },
-    {
-     "id": "e",
-     "initials": "RP",
-     "tint": "pink"
-    }
-   ]
+   "tight": "Straight after lunch \u2014 no prep time"
   },
   {
    "id": "5",
    "time": "18:30",
    "title": "Dinner with friends",
-   "where": "Osteria",
-   "len": "",
    "tint": "orange",
-   "live": "",
    "done": "",
+   "live": "",
    "free": "",
    "last": "1",
    "leave": "",
-   "faces": []
-  }
- ],
- "tomorrow": {
-  "time": "8:00",
-  "title": "Flight to Austin",
-  "more": "+3 more"
- },
- "tasks_note": "11 open",
- "progress": {
-  "done": "3",
-  "left": "8",
-  "label": "3 done today"
- },
- "tasks": [
-  {
-   "id": "t1",
-   "title": "Renew the passport \u2014 the Austin trip needs it",
-   "due": "4 days late",
-   "late": "1",
-   "done": ""
-  },
-  {
-   "id": "t2",
-   "title": "Send the Q4 numbers to accounting",
-   "due": "Today",
-   "late": "",
-   "done": ""
-  },
-  {
-   "id": "t3",
-   "title": "Book the flights for the Austin trip",
-   "due": "Today",
-   "late": "",
-   "done": ""
-  },
-  {
-   "id": "t4",
-   "title": "Reply to the landlord about the lease",
-   "due": "Tomorrow",
-   "late": "",
-   "done": ""
-  }
- ],
- "replies_note": "3 waiting",
- "replies": [
-  {
-   "id": "r1",
-   "icon": "envelope",
-   "tint": "blue",
-   "what": "Maya \u2014 Austin itinerary",
-   "detail": "Asked twice. Needs the dates before Friday.",
-   "when": "2d"
-  },
-  {
-   "id": "r2",
-   "icon": "envelope",
-   "tint": "blue",
-   "what": "Accounting \u2014 Q4 close",
-   "detail": "Waiting on the numbers above.",
-   "when": "1d"
-  },
-  {
-   "id": "r3",
-   "icon": "message",
-   "tint": "green",
-   "what": "Steph",
-   "detail": "\"did you call the dentist back?\"",
-   "when": "7:40"
+   "tight": ""
   }
  ],
  "house": [
@@ -228,56 +336,27 @@
    "icon": "lock.open",
    "tint": "red",
    "what": "Garage door unlocked",
-   "detail": "Since 23:40 last night.",
-   "when": ""
+   "detail": "Since 23:40 last night."
   },
   {
    "id": "h2",
    "icon": "thermometer",
    "tint": "amber",
    "what": "Upstairs is 67\u00b0",
-   "detail": "Heat off since 06:00 \u2014 it drops ~3\u00b0 an hour.",
-   "when": ""
-  },
-  {
-   "id": "h3",
-   "icon": "trash",
-   "tint": "teal",
-   "what": "Bins go out tonight",
-   "detail": "Recycling week.",
-   "when": ""
+   "detail": "Heat off since 06:00."
   }
  ],
  "spend": {
   "amount": "$2,341",
-  "usual": "$1,400",
   "tint": "amber",
   "used": "68",
   "rest": "32",
   "note": "67% over a usual Monday \u2014 two flights on Saturday"
  },
- "notes": [
-  {
-   "id": "n1",
-   "icon": "newspaper",
-   "tint": "blue",
-   "title": "Three things in the news you follow",
-   "body": "Rust lands const generics; the Fed holds; a new Studio ships.",
-   "when": "5:30"
-  },
-  {
-   "id": "n2",
-   "icon": "chart.line.uptrend.xyaxis",
-   "tint": "green",
-   "title": "Slept 7h 40m \u2014 your best this week",
-   "body": "Up 50 minutes on your average. Resting heart rate down 3.",
-   "when": "6:02"
-  }
- ],
  "suggestions": [
   {
    "id": "s1",
-   "text": "What should I do first?"
+   "text": "Clear Austin before I fly"
   },
   {
    "id": "s2",
@@ -285,18 +364,14 @@
   },
   {
    "id": "s3",
-   "text": "What's late and why?"
-  },
-  {
-   "id": "s4",
-   "text": "Draft a reply to Maya"
+   "text": "What's gone quiet?"
   }
  ],
  "keys": [
   {
    "id": "k1",
    "key": "j k",
-   "does": "move through the day"
+   "does": "move through threads"
   },
   {
    "id": "k2",
@@ -305,21 +380,13 @@
   },
   {
    "id": "k3",
-   "key": "r",
-   "does": "refresh"
+   "key": "n",
+   "does": "what's new"
   },
   {
    "id": "k4",
    "key": "/",
    "does": "ask"
   }
- ],
- "focus": {
-  "id": "t2",
-  "tint": "amber",
-  "icon": "flag",
-  "what": "Start with the Q4 numbers",
-  "why": "Accounting has asked twice and Maya's itinerary is waiting behind it \u2014 and your only clear stretch today is 12:00\u201314:00.",
-  "action": "Open"
- }
+ ]
 }

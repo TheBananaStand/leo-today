@@ -1,5 +1,22 @@
 # Today — the design study
 
+**Version 2 is `today.html`.** Version 1 is kept beside it as `v1-today.html`
+/ `v1-ready.json` — it was organised by SOURCE (calendar, tasks, mail, home).
+This one is organised by SUBJECT, which is the whole difference:
+
+- *Renew the passport*, *book the flights*, *Maya wants your dates* and
+  *flight 8:00 tomorrow* were four rows in three blocks of v1. They are one
+  thing — **the Austin trip** — and v2 draws them as one, with the clock on
+  it (`17h`) and the next move under it.
+- **The day is one object, not a list.** The strip at the top is proportional:
+  a 2h review is four times the width of a 30m standup, free time is actually
+  empty, and the marker underneath says where you are in it. Both come from
+  `grow`, so the shape is the payload's.
+- **What changed since you last looked** is a chip in the header. A page you
+  open six times a day has to say what is new, or you read it six times.
+- **Loose ends** is what is left when every subject has taken its own: the
+  things that are only a line.
+
 Not wired to anything. This is the page as it should look, with sample data
 rich enough to judge it by. `today.html` is valid in the subset, so you can
 draw it on any box with no hub, no Mac and no screen:
