@@ -61,8 +61,20 @@ descriptor = {
             },
         }
     },
+    "fields": [{
+        "key": "today_graph_token",
+        "label": "Graph token",
+        "field_type": "password",
+        "required": False,
+    }],
     "entitlements": {
+        # Declared because it is what this package actually needs, and so the
+        # install consent names it — but see the note in `leo-today`: the app
+        # spawn path does not mint from this today.
         "graph_scopes": ["calendar:read", "reminders:read", "feed:read"],
+        # The route that DOES reach the process: a declared settings key,
+        # handed over as an env var at spawn.
+        "settings_read": ["today_graph_token"],
     },
     "app": {
         "repo": "https://github.com/TheBananaStand/leo-today",

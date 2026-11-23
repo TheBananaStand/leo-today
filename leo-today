@@ -28,7 +28,15 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 API = os.environ.get("LEO_API_URL", "http://127.0.0.1:8420").rstrip("/")
-TOKEN = os.environ.get("LEO_PACKAGE_TOKEN", "")
+# The hub hands `LEO_PACKAGE_TOKEN` to an app whose entitlements earn one.
+# Today's do not: `graph_scopes_for` (leo-package/src/manager.rs) only ever
+# mints the INFERENCE scope, so a declared `graph_scopes` is stored,
+# validated and never turned into a credential. Until that is fixed the
+# token arrives the other supported way — a settings key this package
+# declares in `settings_read`, which the hub hands over as an env var.
+TOKEN = (os.environ.get("LEO_PACKAGE_TOKEN")
+         or os.environ.get("today_graph_token")
+         or os.environ.get("TODAY_GRAPH_TOKEN") or "")
 PORT = int(os.environ.get("PORT") or os.environ.get("LEO_APP_PORT") or "8477")
 
 # A source gets this long and no longer. The page is a glance: four sources
@@ -217,7 +225,10 @@ def payload():
         # Nothing answered: one real state with a way out, and no footer
         # repeating what the card already says.
         d["nothing_worked"] = "1"
-        d["why"] = " ".join(g["what"] for g in gaps)
+        # Every source failing for the SAME reason is one fault, not three.
+        reasons = list(dict.fromkeys(g["what"].split(" didn't answer — ", 1)[-1] for g in gaps))
+        d["why"] = ("Nothing answered: " + reasons[0]) if len(reasons) == 1 \
+            else " ".join(g["what"] for g in gaps)
         return d
 
     if ev:

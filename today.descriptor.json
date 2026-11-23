@@ -45,11 +45,22 @@
       }
     }
   },
+  "fields": [
+    {
+      "key": "today_graph_token",
+      "label": "Graph token",
+      "field_type": "password",
+      "required": false
+    }
+  ],
   "entitlements": {
     "graph_scopes": [
       "calendar:read",
       "reminders:read",
       "feed:read"
+    ],
+    "settings_read": [
+      "today_graph_token"
     ]
   },
   "app": {
