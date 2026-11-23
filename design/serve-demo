@@ -12,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = pathlib.Path(__file__).resolve().parent
 PORT = int(os.environ.get("PORT") or os.environ.get("LEO_APP_PORT") or "8478")
-WHICH = os.environ.get("todaydesign_payload") or "ready"
+WHICH = os.environ.get("today_payload") or "ready"
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -38,5 +38,5 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
-print(f"today-design: serving the {WHICH} payload on :{PORT}", flush=True)
+print(f"today: serving the design study — the {WHICH} payload on :{PORT}", flush=True)
 ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

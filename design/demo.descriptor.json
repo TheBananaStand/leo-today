@@ -1,18 +1,18 @@
 {
-  "name": "todaydesign",
-  "label": "Today (design)",
-  "description": "The Today design study \u2014 the page as it should look, on sample data.",
+  "name": "today",
+  "label": "Today",
+  "description": "What today holds, at a glance \u2014 the design study, on sample data.",
   "details": "Nothing is live. It serves one sample payload so the markup can be judged in the real app with the platform's own controls, type and spacing.",
   "setup_hint": "Nothing to set up.",
-  "icon": "sparkles",
+  "icon": "sun.max",
   "category": "package",
   "kind": "app",
   "default_enabled": false,
   "pages": [
     {
       "path": "today",
-      "label": "Today (design)",
-      "icon": "sparkles",
+      "label": "Today",
+      "icon": "sun.max",
       "show_in_nav": true
     }
   ],
@@ -26,7 +26,7 @@
   },
   "fields": [
     {
-      "key": "todaydesign_payload",
+      "key": "today_payload",
       "label": "Which sample (ready | evening)",
       "field_type": "text",
       "required": false
@@ -34,7 +34,7 @@
   ],
   "entitlements": {
     "settings_read": [
-      "todaydesign_payload"
+      "today_payload"
     ]
   },
   "app": {
@@ -42,7 +42,7 @@
     "branch": "design",
     "build": "make",
     "bin": "design/serve-demo",
-    "port": 8478,
+    "port": 8477,
     "supervised": false
   }
 }
