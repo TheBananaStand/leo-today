@@ -297,32 +297,54 @@ def notes(now, act):
     return out
 
 
-MAIL = re.compile(r"^\s*(?:\d+[.)]\s*)?(?:\[[^\]]*\]\s*)?(?P<who>[^|·\-—]{2,40}?)\s*[|·\-—]\s*(?P<subj>.{3,90})")
+NOREPLY = re.compile(r"no[-_.]?reply|do[-_.]?not[-_.]?reply|notification|mailer|bounce", re.I)
+FROM = re.compile(r'^\s*"?(?P<name>[^"<]{1,60}?)"?\s*<(?P<addr>[^>]+)>\s*$')
+
+
+def sender(raw):
+    """The person, out of `"Name" <addr>` — or the mailbox when there is no name."""
+    m = FROM.match(str(raw or ""))
+    if m:
+        name = m.group("name").strip(" ,")
+        return (name or m.group("addr").split("@")[0]), m.group("addr")
+    raw = str(raw or "").strip()
+    return (raw.split("@")[0] or raw), raw
 
 
 def mail(now, act):
-    """Unanswered mail, read out of the inbox tool's prose.
+    """What is waiting on a reply.
 
-    The tool answers TEXT — `ToolResult` has no other channel — so this parses
-    lines rather than fields. A line it cannot read is skipped, never guessed
-    at: a wrong sender on a page about what is waiting on you is worse than a
-    shorter list.
+    The inbox tool answers JSON — a list of messages with `from`, `subject`
+    and `is_read`. It is read as JSON first and only parsed as prose if that
+    fails, because a tool that changes its mind about which it speaks should
+    cost this page a block, not fill it with fragments of the other one: a
+    `"date":` line once reached the screen as a person's name.
+
+    A machine is not waiting on you. Anything from a no-reply address is
+    dropped, which is most of an inbox and all of its noise.
     """
-    out_text = tool("email", {"action": "list_inbox", "limit": 12}, act)
+    out_text = tool("email", {"action": "list_inbox", "limit": 25}, act)
+    try:
+        raw = json.loads(out_text)
+    except Exception:  # noqa: BLE001
+        raw = None
     out = []
-    for line in out_text.splitlines():
-        line = line.strip()
-        if not line or line[0] in '"{[}]' or line.endswith((",", "{", "[")) or ":" in line[:12]:
-            continue
-        m = MAIL.match(line)
-        if not m:
-            continue
-        who, subj = m.group("who").strip(), m.group("subj").strip()
-        if not who or who.lower().startswith(("subject", "from", "no ", "total")):
-            continue
-        out.append({"id": f"m{len(out)}", "who": who, "subject": subj[:90]})
-        if len(out) >= 8:
-            break
+    if isinstance(raw, list):
+        for m in raw:
+            if not isinstance(m, dict):
+                continue
+            who, addr = sender(m.get("from"))
+            if NOREPLY.search(addr) or NOREPLY.search(who):
+                continue
+            subj = str(m.get("subject") or "").strip()
+            if not subj:
+                continue
+            out.append({"id": f"m{m.get('id', len(out))}", "who": who[:40],
+                        "subject": subj[:90], "unread": not m.get("is_read")})
+            if len(out) >= 10:
+                break
+        # Unread first: those are the ones that are actually waiting.
+        out.sort(key=lambda m: not m["unread"])
     return out
 
 
