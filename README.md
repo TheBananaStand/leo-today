@@ -5,8 +5,40 @@ knowing. It is a Leo **app package** — a descriptor plus a small process — s
 it installs over a running hub with no rebuild of Leo and no checkout.
 
 ```bash
-leo packages install today.descriptor.json --enabled
+git clone https://github.com/TheBananaStand/leo-today /tmp/leo-today
+leo packages install /tmp/leo-today/today.descriptor.json --enabled
+
+# The page needs a credential to read the hub with. See "The token" below
+# for why this step is not automatic yet.
+leo packages token mint today --scope calendar:read,reminders:read,feed:read --label "Today's Graph reads"
+leo packages set today today_graph_token=<the token it printed>
+leo packages disable today && leo packages enable today   # respawn, so it picks the token up
 ```
+
+Then open **Today** in the sidebar, or go to `/p/today/today`.
+
+## The token, and why that step exists
+
+A package declares what it needs to read as `entitlements.graph_scopes`, and
+this one declares `calendar:read`, `reminders:read`, `feed:read`. The install
+consent shows them. **They are never minted for an app package:**
+`graph_scopes_for()` in `crates/leo-package/src/manager.rs` builds its scope
+list from `entitlements.inference` alone, so an app that declares Graph scopes
+and nothing else is spawned with no `LEO_PACKAGE_TOKEN` at all. The call site's
+own comment says an entitled app gets the credential to reach back with; that
+is true only for inference.
+
+So the token comes the other supported way — a settings key this package
+declares in `settings_read`, which the hub hands to the process as an
+environment variable at spawn. When the mint path is fixed, the three lines
+above collapse into the first one and nothing else here changes.
+
+**Reading for a person is separate from that.** Reminders and the feed answer
+for ONE person and refuse a bare package credential outright. The hub stamps a
+single-use grant (`x-leo-acting-grant`) on its call to `/leo/ui/data`; this
+spends it at `/graph/v1/acting/exchange` and carries the result on those two
+reads, so the page is each person's own. The calendar is a household domain
+and keeps the package credential.
 
 ## What it is made of
 
