@@ -61,7 +61,7 @@ SHOWN = 5
 TINTS = ["blue", "purple", "teal", "orange", "green", "pink", "amber", "red"]
 
 
-def ask_claude(system, turns):
+def ask_claude(system, turns, work="conversation"):
     """One turn, through the hub — this package never holds a model key.
 
     `work` says what KIND of work this is instead of naming a model, so the
@@ -70,7 +70,7 @@ def ask_claude(system, turns):
     already owns.
     """
     body = json.dumps({
-        "work": "conversation",
+        "work": work,
         "max_tokens": 700,
         "system": system,
         "messages": turns,
@@ -519,10 +519,27 @@ class Handler(BaseHTTPRequestHandler):
             rows = remember(user, "user", said)
             turns = [{"role": "assistant" if r["role"] == "assistant" else "user",
                       "content": r["content"]} for r in rows[-12:]]
+            system = SYSTEM.format(brief=brief)
             try:
-                answer = ask_claude(SYSTEM.format(brief=brief), turns)
+                try:
+                    answer = ask_claude(system, turns)
+                except urllib.error.HTTPError as e:
+                    # The seed model catalog prices exactly ONE model, so on a
+                    # hub whose `model_catalog` has never been edited the
+                    # household's default is refused: "declares no rate, so a
+                    # call would be billed at $0". `periodic_check` is the work
+                    # class that routes to the `fast` role, which IS the priced
+                    # one — so asking again that way answers rather than
+                    # failing, and the remedy (price your default) stays the
+                    # owner's to apply. Any other refusal is re-raised.
+                    if e.code != 503:
+                        raise
+                    body = e.read().decode()
+                    if "declares no rate" not in body:
+                        raise urllib.error.HTTPError(e.url, e.code, body, e.headers, None)
+                    answer = ask_claude(system, turns, work="periodic_check")
             except urllib.error.HTTPError as e:
-                detail = e.read().decode()[:200]
+                detail = (e.read() or b"").decode()[:200] or str(e.reason)
                 # A refusal is the hub's sentence, not a crash: the element
                 # draws `error` and the thread stays open.
                 sock.sendall(ws_frame(json.dumps(
