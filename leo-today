@@ -28,6 +28,7 @@ the same inputs.
 
 import json
 import os
+import hashlib
 import zlib
 import re
 import sys
@@ -137,6 +138,40 @@ def tool(name, args, token):
     if out.get("is_error"):
         raise Gap(f"`{name}` answered with an error")
     return out.get("output") or ""
+
+
+def ask_claude(system, turns, work="periodic_check", max_tokens=600):
+    """One model call, through the hub — this package never holds a key.
+
+    `work` says what KIND of work it is instead of naming a model, so the
+    household's own routing picks one and its ceiling can downgrade it.
+
+    The retry is not an optimisation. The built-in model catalog prices
+    exactly ONE model, so on a hub whose `model_catalog` has never been
+    edited the household default is refused outright — "declares no rate, so
+    a call would be billed at $0". `periodic_check` is the class that routes
+    to the `fast` role, which IS the priced one. Still never naming a model:
+    the hub picks both times.
+    """
+    def send(w):
+        body = json.dumps({"work": w, "max_tokens": max_tokens,
+                           "system": system, "messages": turns}).encode()
+        req = urllib.request.Request(
+            f"{API}/graph/v1/inference/messages", data=body, method="POST",
+            headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=90) as r:
+            return json.loads(r.read().decode())
+
+    try:
+        answer = send(work)
+    except urllib.error.HTTPError as e:
+        detail = (e.read() or b"").decode()
+        if e.code != 503 or "declares no rate" not in detail:
+            raise Gap(f"the hub refused the model call ({e.code})") from None
+        answer = send("periodic_check")
+    out = [b.get("text", "") for b in (answer.get("content") or [])
+           if isinstance(b, dict) and b.get("type") == "text"]
+    return "".join(out).strip()
 
 
 def acting(grant):
@@ -431,6 +466,155 @@ def house(now, act):
         if len(out) >= 4:
             break
     return out
+
+
+
+# ---------------------------------------------------------------------------
+# The briefing
+#
+# The one part of this page a model writes, and it is NEVER in the request
+# path. A page you open eight times a day cannot wait on inference eight
+# times, and a briefing that is six minutes stale is worth more than one that
+# costs four seconds.
+#
+# So: the briefing is cached against a DIGEST of what it was written about.
+# On every load the digest is recomputed; if it matches, the cache is served
+# untouched and nothing is spent. If it differs, the STALE briefing is served
+# at once — labelled with its age — and a regeneration runs in the
+# background for the next load. The page is never blocked and never empty
+# once it has been written once.
+#
+# The digest is over what the briefing is ABOUT, not over the clock: ids and
+# their state. A minute passing is not news. A reminder being ticked is.
+# ---------------------------------------------------------------------------
+
+BRIEF_DIR = os.path.join(DATA, "brief")
+_regen = set()
+_regen_lock = threading.Lock()
+
+BRIEF_SYSTEM = """You write one person's daily briefing inside their own assistant.
+
+You are given everything their hub knows about today. Answer ONLY with JSON:
+
+{"headline": "...", "focus": {"what": "...", "why": "..."},
+ "notes": [{"what": "...", "why": "..."}], "mood": "calm|busy|behind"}
+
+- headline: ONE sentence on the state of the day. Concrete. Name real things.
+  Not "you have a busy day" — "Three meetings before noon, then the afternoon
+  is yours."
+- focus: the single thing worth their attention today, and why it is that
+  one rather than another. Prefer something with a deadline, someone waiting,
+  or a consequence. If nothing deserves it, say so in `what` and leave `why`
+  empty.
+- notes: up to four things to KNOW or to be thinking about next — something
+  coming, something that has gone quiet, something that will become a problem.
+  Not a restatement of the lists; they can already see those.
+- mood: `behind` if things are overdue or someone is waiting, `busy` if the
+  day is full, `calm` otherwise.
+
+Write like a sharp colleague who read everything before you got in. Short
+sentences. No preamble, no "here is", no bullets inside a field. Never invent
+a fact that is not below; if something is unknown, leave it out.
+"""
+
+
+def brief_path(user):
+    os.makedirs(BRIEF_DIR, exist_ok=True)
+    safe = "".join(c for c in (user or "nobody") if c.isalnum() or c in "-_") or "nobody"
+    return os.path.join(BRIEF_DIR, f"{safe}.json")
+
+
+def digest_of(items, evs):
+    """What the briefing is ABOUT, as one string.
+
+    State, not time: a tick, an arrival or a departure changes it; a minute
+    passing does not.
+    """
+    parts = [f"{i['kind']}:{i['id']}:{i.get('late', '')}" for i in items]
+    parts += [f"e:{e['id']}:{e['at'].isoformat()}" for e in evs]
+    parts.append(datetime.now().strftime("%Y-%m-%d"))  # a new day is new news
+    return hashlib.sha1("|".join(sorted(parts)).encode()).hexdigest()[:16]
+
+
+def context_for(items, evs, now, extras):
+    """Everything the briefing is allowed to know, as plain lines."""
+    out = []
+    today = [e for e in evs if e["at"].date() == now.date()]
+    if today:
+        out.append("TODAY'S CALENDAR:")
+        for e in today:
+            mark = "(done)" if e["at"] + timedelta(minutes=e["mins"]) < now else ""
+            out.append(f"- {clock(e['at'])} {e['title']}"
+                       + (f" at {e['where']}" if e["where"] else "") + f" {mark}".rstrip())
+    later = [e for e in evs if e["at"].date() > now.date()]
+    if later:
+        out.append("\nTOMORROW:")
+        for e in later[:5]:
+            out.append(f"- {clock(e['at'])} {e['title']}")
+    by_kind = {}
+    for i in items:
+        by_kind.setdefault(i["kind"], []).append(i)
+    for kind, label in (("task", "DUE OR OVERDUE"), ("mail", "UNANSWERED MAIL"),
+                        ("note", "RAISED SINCE LAST NIGHT")):
+        rowsk = by_kind.get(kind) or []
+        if rowsk:
+            out.append(f"\n{label}:")
+            for i in rowsk[:12]:
+                out.append(f"- {i['text']}" + (f" ({i['when']})" if i.get("when") else ""))
+    for line in extras:
+        out.append(f"\n{line}")
+    out.append(f"\nIt is {now.strftime('%A %-d %B, %H:%M')}.")
+    return "\n".join(out)
+
+
+def write_brief(user, key, context):
+    """Ask for the briefing and file it. Runs OFF the request path."""
+    try:
+        answer = ask_claude(BRIEF_SYSTEM, [{"role": "user", "content": context}],
+                            work="periodic_check", max_tokens=600)
+        text = answer.strip()
+        if text.startswith("```"):
+            text = text.split("```")[1].lstrip("json").strip()
+        data = json.loads(text[text.index("{"):text.rindex("}") + 1])
+        if not isinstance(data.get("headline"), str):
+            raise ValueError("no headline")
+        data["at"] = datetime.now().isoformat(timespec="minutes")
+        with _regen_lock:
+            json.dump({"digest": key, "brief": data}, open(brief_path(user), "w"))
+    except Exception as e:  # noqa: BLE001 — a briefing that fails costs a block
+        print(f"today: briefing failed: {type(e).__name__}: {e}", flush=True)
+    finally:
+        with _regen_lock:
+            _regen.discard((user, key))
+
+
+def briefing(user, items, evs, now, extras):
+    """The cached briefing, and a regeneration if it is out of date."""
+    key = digest_of(items, evs)
+    try:
+        held = json.load(open(brief_path(user)))
+    except Exception:  # noqa: BLE001
+        held = None
+
+    if not held or held.get("digest") != key:
+        with _regen_lock:
+            if (user, key) not in _regen:
+                _regen.add((user, key))
+                threading.Thread(target=write_brief, daemon=True,
+                                 args=(user, key, context_for(items, evs, now, extras))).start()
+
+    if not held:
+        return None
+    d = dict(held["brief"])
+    stale = held.get("digest") != key
+    written = when(d.pop("at", None))
+    if written:
+        mins = int((now - written).total_seconds() // 60)
+        d["age"] = ("just now" if mins < 2 else
+                    f"{mins} min ago" if mins < 90 else
+                    f"{mins // 60}h ago" if mins < 24 * 60 else written.strftime("%a"))
+    d["stale"] = "1" if stale else ""
+    return d
 
 
 # ---------------------------------------------------------------------------
@@ -737,6 +921,32 @@ def payload(grant=None, user=""):
         d["loose"] = loose[:SHOWN]
         d["loose_note"] = f"{min(len(loose), SHOWN)} of {len(loose)}" if len(loose) > SHOWN \
             else str(len(loose))
+
+    # The briefing. Cached against what it is about; served stale and
+    # rewritten behind the page when that changes. Never blocks.
+    extras = []
+    if got.get("weather"):
+        w = got["weather"]
+        extras.append(f"WEATHER: {w['temp']} {w['condition']}, {w['range']}.")
+    if got.get("house"):
+        extras.append("THE HOUSE: " + "; ".join(h["what"] for h in got["house"]) + ".")
+    if gaps:
+        extras.append("NOT AVAILABLE RIGHT NOW: "
+                      + "; ".join(g["id"] for g in gaps) + ".")
+    br = briefing(user, items, evs, now, extras)
+    if not br and (items or evs):
+        d["brief_pending"] = "1"
+    if br:
+        mood = str(br.get("mood") or "calm").lower()
+        br["tint"] = {"behind": "red", "busy": "amber"}.get(mood, "green")
+        br["icon"] = {"behind": "exclamationmark.triangle", "busy": "flame"}.get(mood, "sun.max")
+        notes = [n for n in (br.get("notes") or []) if isinstance(n, dict) and n.get("what")]
+        br["notes"] = [{"id": f"bn{i}", "what": str(n.get("what"))[:160],
+                        "why": str(n.get("why") or "")[:200]} for i, n in enumerate(notes[:4])]
+        focus = br.get("focus") if isinstance(br.get("focus"), dict) else {}
+        br["focus"] = {"what": str(focus.get("what") or "")[:140],
+                       "why": str(focus.get("why") or "")[:240]}
+        d["brief"] = br
 
     d["suggestions"] = suggestions(threads, tks)
     note = changed_since(user, [i["id"] for i in items])

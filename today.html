@@ -122,6 +122,55 @@
          review and the hole at noon is a hole. The marker underneath is
          where you are in it. Both come from `grow`, so the shape is the
          payload's and nothing here computes. -->
+    <!-- ===================== THE BRIEFING =====================
+         The reason the page is open. Written by a model, but never while
+         you wait: it is cached against a digest of what it is about, served
+         stale the moment that changes, and rewritten behind the page. The
+         age is always shown, because a briefing whose age you cannot see is
+         one you cannot trust. -->
+    <section if="brief" id="brief" tint="{brief.tint}" class="flex flex-col gap-4 p-5 rounded-2xl bg-surface">
+      <div class="flex items-start gap-4">
+        <span class="size-10 shrink-0 flex items-center justify-center rounded-xl bg-tint-wash">
+          <img icon="{brief.icon}" alt="" class="size-5 text-tint">
+        </span>
+        <span class="flex-1 min-w-0 text-xl font-semibold line-clamp-3">{brief.headline}</span>
+        <div class="flex flex-col items-end gap-1 shrink-0">
+          <span if="brief.age" class="text-xs text-muted">{brief.age}</span>
+          <span if="brief.stale" class="text-xs text-muted animate-pulse">rewriting…</span>
+        </div>
+      </div>
+
+      <!-- Where the time goes. One thing, and why that one. -->
+      <div if="brief.focus.what" id="brief-focus" class="flex items-start gap-3 p-4 rounded-xl bg-elevated">
+        <img icon="target" alt="" class="size-4 mt-0.5 shrink-0 text-tint">
+        <div class="flex flex-col gap-1 min-w-0 flex-1">
+          <span class="text-sm font-semibold">{brief.focus.what}</span>
+          <span if="brief.focus.why" class="text-xs text-secondary line-clamp-3">{brief.focus.why}</span>
+        </div>
+      </div>
+
+      <!-- What to be thinking about next. -->
+      <div if="brief.notes" class="grid gap-3 md:grid-cols-2">
+        <div each="n in brief.notes" id="{n.id}" class="flex items-start gap-2.5 min-w-0">
+          <span class="size-1.5 mt-2 shrink-0 rounded-full bg-tint"></span>
+          <div class="flex flex-col gap-0.5 min-w-0 flex-1">
+            <span class="text-sm line-clamp-2">{n.what}</span>
+            <span if="n.why" class="text-xs text-muted line-clamp-2">{n.why}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- The first briefing is still being written. Say so rather than
+         showing a hole where the page's whole point goes. -->
+    <section if="brief_pending" id="brief-pending" class="flex items-center gap-4 p-5 rounded-2xl bg-surface">
+      <span class="size-10 shrink-0 rounded-xl bg-elevated animate-pulse"></span>
+      <div class="flex flex-col gap-1.5 min-w-0 flex-1">
+        <span class="h-3 w-64 rounded bg-elevated animate-pulse"></span>
+        <span class="text-xs text-muted">Reading your day…</span>
+      </div>
+    </section>
+
     <section if="strip" id="strip" class="flex flex-col gap-1.5">
       <div class="flex items-stretch gap-1 h-12 p-1 rounded-xl bg-surface">
         <div each="b in strip" id="b-{b.id}" grow="{b.span}" tint="{b.tint}" class="flex min-w-0">

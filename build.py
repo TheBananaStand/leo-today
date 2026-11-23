@@ -69,7 +69,8 @@ descriptor = {
         # install consent names it — but see the note in `leo-today`: the app
         # spawn path does not mint from this today.
         "graph_scopes": ["calendar:read", "reminders:read", "feed:read",
-                         "hub_tools:read", "hub_tools:invoke"],
+                         "hub_tools:read", "hub_tools:invoke",
+                         "inference:messages"],
         # The route that DOES reach the process: a declared settings key,
         # handed over as an env var at spawn.
         "settings_read": ["today_graph_token"],
