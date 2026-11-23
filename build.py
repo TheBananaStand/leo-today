@@ -75,6 +75,13 @@ descriptor = {
         # The route that DOES reach the process: a declared settings key,
         # handed over as an env var at spawn.
         "settings_read": ["today_graph_token"],
+        # Asking about the day goes through the hub's own model routing — this
+        # package never holds a key, and the household's ceiling and costs page
+        # apply to it like anything else.
+        "inference": {
+            "classes": ["prompts"],
+            "purpose": "to answer questions about what is on the person's Today screen",
+        },
     },
     "app": {
         "repo": "https://github.com/TheBananaStand/leo-today",

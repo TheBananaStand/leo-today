@@ -1,4 +1,4 @@
-<div id="today" subset="6" class="h-full flex flex-col overflow-y-auto bg-canvas">
+<div id="today" subset="14" class="h-full flex flex-col overflow-y-auto bg-canvas">
 
   <!-- ONE ROW FORM PER KIND, written once and stamped. The whole page is
        three of these plus one shell repeated verbatim, which is what makes
@@ -129,6 +129,59 @@
         <span class="text-lg font-semibold">Nothing on today</span>
         <span class="max-w-prose px-6 text-sm text-muted text-center">No events, nothing due and nothing new since you last looked.</span>
       </div>
+
+      <!-- Ask about the day. `<conversation>` draws NOTHING: it owns the
+           socket and the transcript and hands this markup a scope, so the
+           thread looks like Today rather than like a chat window dropped
+           onto it. The composer is markup too.
+
+           It sits at the FOOT of the column on purpose — the blocks above
+           keep their places whatever is said here. A page that re-arranged
+           itself as you talked to it would cost you the one thing a glance
+           page is for. -->
+      <section id="ask" class="flex flex-col gap-3 pt-2">
+        <h2 class="text-xs font-semibold text-muted uppercase">Ask</h2>
+        <conversation id="chat" name="chat" src="/p/today/chat" history="/p/today/chat/messages"
+                      class="flex flex-col gap-3">
+
+          <!-- ONE wrapper per turn, with the two faces inside it. Two
+               `each`es gated on `m.mine` would draw every one of yours and
+               then every one of Leo's: the order is the conversation. -->
+          <div each="m in messages" id="turn-{m.id}" class="flex flex-col">
+            <div if="m.mine" class="self-end max-w-prose px-4 py-2 rounded-2xl rounded-br-none bg-accent-wash">
+              <span class="text-sm">{m.text}</span>
+            </div>
+            <div if="!m.mine" class="self-start max-w-prose px-4 py-2 rounded-2xl rounded-bl-none bg-surface">
+              <span class="text-sm">{m.text}</span>
+            </div>
+          </div>
+
+          <!-- The turn in flight. `animate-pulse` is the language's word for
+               "something is working"; there is no spinner to invent. -->
+          <div if="live.text" id="live" class="self-start max-w-prose px-4 py-2 rounded-2xl rounded-bl-none bg-surface">
+            <span class="text-sm">{live.text}</span>
+          </div>
+          <div if="sending" id="thinking" class="self-start px-4 py-2 rounded-2xl rounded-bl-none bg-surface animate-pulse">
+            <span class="text-sm text-muted">Thinking</span>
+          </div>
+
+          <div if="error" id="chat-error" class="px-4 py-2 rounded-xl bg-danger">
+            <span class="text-xs text-danger line-clamp-3">{error}</span>
+          </div>
+
+          <!-- Nothing said yet: say what this is for, in the page's nouns,
+               rather than leaving an unlabelled box. -->
+          <span if="empty" class="text-sm text-muted">Ask about today — what moved, what is late, what to do first.</span>
+
+          <form id="compose" class="flex items-center gap-2">
+            <input bind="form.message" placeholder="Ask about today" autofocus
+                   class="flex-1 h-11 min-w-0">
+            <button command="send" for="chat" args="text={$.form.message}" shortcut="enter"
+                    disabled="!$.form.message"
+                    class="shrink-0 h-11 px-5 bg-accent text-on-accent">Ask</button>
+          </form>
+        </conversation>
+      </section>
 
       <!-- A source that did not answer is a LINE, not a broken page. The
            blocks above are simply absent; this says which and why, so an

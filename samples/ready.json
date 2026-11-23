@@ -4,7 +4,7 @@
   "events_note": "4 events",
   "events": [
     { "id": "1", "time": "9:30", "title": "Standup with the build team", "where": "Zoom", "tint": "blue", "now": "" },
-    { "id": "2", "time": "11:00", "title": "Dentist", "where": "Dentist.s office", "tint": "teal", "now": "" },
+    { "id": "2", "time": "11:00", "title": "Dentist", "where": "Dentist's office", "tint": "teal", "now": "" },
     { "id": "3", "time": "14:00", "title": "Quarterly review", "where": "Conference room", "tint": "purple", "now": "" },
     { "id": "4", "time": "18:30", "title": "Dinner with friends", "where": "Osteria", "tint": "orange", "now": "" }
   ],

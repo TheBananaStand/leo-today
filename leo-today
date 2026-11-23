@@ -17,13 +17,18 @@ one did not answer. A page that is down whenever any one package is down is
 not a page you would keep open.
 """
 
+import base64
+import hashlib
 import json
 import os
+import struct
 import sys
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+import time
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -34,9 +39,14 @@ API = os.environ.get("LEO_API_URL", "http://127.0.0.1:8420").rstrip("/")
 # validated and never turned into a credential. Until that is fixed the
 # token arrives the other supported way — a settings key this package
 # declares in `settings_read`, which the hub hands over as an env var.
-TOKEN = (os.environ.get("LEO_PACKAGE_TOKEN")
-         or os.environ.get("today_graph_token")
-         or os.environ.get("TODAY_GRAPH_TOKEN") or "")
+# ORDER MATTERS. Declaring `entitlements.inference` makes the hub mint a
+# LEO_PACKAGE_TOKEN — scoped to inference and NOTHING ELSE, because
+# `graph_scopes_for` builds its list from the inference entitlement alone. The
+# settings token is the one minted with the read scopes, so it has to win;
+# preferring the hub's would silently cost the page its calendar.
+TOKEN = (os.environ.get("today_graph_token")
+         or os.environ.get("TODAY_GRAPH_TOKEN")
+         or os.environ.get("LEO_PACKAGE_TOKEN") or "")
 PORT = int(os.environ.get("PORT") or os.environ.get("LEO_APP_PORT") or "8477")
 
 # A source gets this long and no longer. The page is a glance: four sources
@@ -49,6 +59,32 @@ TIMEOUT = 2.5
 SHOWN = 5
 
 TINTS = ["blue", "purple", "teal", "orange", "green", "pink", "amber", "red"]
+
+
+def ask_claude(system, turns):
+    """One turn, through the hub — this package never holds a model key.
+
+    `work` says what KIND of work this is instead of naming a model, so the
+    household's own routing picks one and the ceiling can downgrade it. A
+    hardcoded model id here would be a second opinion about a decision the hub
+    already owns.
+    """
+    body = json.dumps({
+        "work": "conversation",
+        "max_tokens": 700,
+        "system": system,
+        "messages": turns,
+    }).encode()
+    req = urllib.request.Request(
+        f"{API}/graph/v1/inference/messages", data=body, method="POST",
+        headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=90) as r:
+        answer = json.loads(r.read().decode())
+    out = []
+    for block in answer.get("content") or []:
+        if isinstance(block, dict) and block.get("type") == "text":
+            out.append(block.get("text", ""))
+    return "".join(out).strip() or "(no answer)"
 
 
 class Gap(Exception):
@@ -290,12 +326,146 @@ def payload(grant=None):
     return d
 
 
+# ---------------------------------------------------------------------------
+# The thread
+#
+# `<conversation src=… history=…>` in the markup is the hub's own chat engine
+# pointed at this process: `src` is a WebSocket the app proxy bridges to
+# `/chat` here, `history` an ordinary GET. The element draws nothing — the
+# page's markup draws each turn — so all this has to do is speak the two
+# frames that matter: a `message` in, a `result` out.
+#
+# The proxy stamps the asker's identity and a single-use acting grant on the
+# UPGRADE, exactly as it does on a UI-data request, so a thread can be told
+# whose day it is about.
+# ---------------------------------------------------------------------------
+
+GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+THREADS = os.path.join(os.environ.get("LEO_DATA_DIR", "."), "threads")
+_lock = threading.Lock()
+
+
+def thread_path(user):
+    os.makedirs(THREADS, exist_ok=True)
+    safe = "".join(c for c in (user or "nobody") if c.isalnum() or c in "-_") or "nobody"
+    return os.path.join(THREADS, f"{safe}.json")
+
+
+def transcript(user):
+    try:
+        with open(thread_path(user)) as f:
+            return json.load(f)
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def remember(user, role, text):
+    with _lock:
+        rows = transcript(user)
+        rows.append({"id": f"{role}-{int(time.time() * 1000)}-{len(rows)}",
+                     "role": role, "content": text,
+                     "created_at": datetime.now(timezone.utc).isoformat()})
+        # A glance page's thread is not an archive.
+        rows = rows[-40:]
+        with open(thread_path(user), "w") as f:
+            json.dump(rows, f)
+        return rows
+
+
+def ws_frame(text):
+    """One unmasked text frame, server to client."""
+    data = text.encode()
+    head = bytes([0x81])
+    n = len(data)
+    if n < 126:
+        head += bytes([n])
+    elif n < (1 << 16):
+        head += bytes([126]) + struct.pack(">H", n)
+    else:
+        head += bytes([127]) + struct.pack(">Q", n)
+    return head + data
+
+
+def ws_read(sock):
+    """One frame from the client, or None when it has gone."""
+    def exact(n):
+        buf = b""
+        while len(buf) < n:
+            chunk = sock.recv(n - len(buf))
+            if not chunk:
+                return None
+            buf += chunk
+        return buf
+
+    head = exact(2)
+    if not head:
+        return None
+    opcode = head[0] & 0x0F
+    masked = head[1] & 0x80
+    n = head[1] & 0x7F
+    if n == 126:
+        n = struct.unpack(">H", exact(2))[0]
+    elif n == 127:
+        n = struct.unpack(">Q", exact(8))[0]
+    key = exact(4) if masked else b"\x00\x00\x00\x00"
+    body = exact(n) or b""
+    if masked:
+        body = bytes(b ^ key[i % 4] for i, b in enumerate(body))
+    if opcode == 0x8:  # close
+        return None
+    if opcode in (0x9, 0xA):  # ping / pong — nothing to answer with text
+        return b""
+    return body
+
+
+def day_brief(grant):
+    """What the page is showing, as words the model can answer about."""
+    try:
+        d = payload(grant)
+    except Exception as e:  # noqa: BLE001
+        return f"(today's data could not be read: {type(e).__name__})"
+    parts = []
+    for e in d.get("events", []):
+        parts.append(f"- {e['time']} {e['title']}" + (f" ({e['where']})" if e.get("where") else ""))
+    if parts:
+        parts.insert(0, "On the calendar today:")
+    due = [f"- {t['title']} ({t['due']})" for t in d.get("tasks", [])]
+    if due:
+        parts += ["", "Due or overdue:"] + due
+    notes = [f"- {n['title']}: {n.get('body', '')}" for n in d.get("notes", [])]
+    if notes:
+        parts += ["", "Raised since last night:"] + notes
+    for g in d.get("gaps", []):
+        parts.append(f"(not available: {g['what']})")
+    return "\n".join(parts) or "Nothing on the calendar, nothing due, nothing new."
+
+
+SYSTEM = """You are Leo, answering about the person's day on their Today screen.
+
+The page they are looking at is below. Answer from it. Be brief — one or two
+sentences unless they ask for more, and no preamble. If something they ask
+about is not on the page, say so plainly rather than guessing; a line saying a
+source was unavailable means you do not know, not that there is nothing.
+
+{brief}
+"""
+
+
 class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
     def do_GET(self):  # noqa: N802
         path = self.path.split("?")[0]
+        if path == "/chat" and "websocket" in (self.headers.get("Upgrade") or "").lower():
+            self.talk()
+            return
         if path == "/leo/ui/data":
             grant = self.headers.get("x-leo-acting-grant")
             body = json.dumps(payload(grant)).encode()
+        elif path == "/chat/messages":
+            # What `history=` reads: the turns, oldest first, as the chat
+            # engine decodes them (`id`, `role`, `content`, `created_at`).
+            body = json.dumps(transcript(self.headers.get("x-leo-user-id"))).encode()
         elif path in ("/leo/health", "/health"):
             body = b'{"ok":true}'
         else:
@@ -306,6 +476,64 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def talk(self):
+        """The thread's socket: a `message` in, a `result` out.
+
+        One turn at a time, in this connection's own thread — the server is a
+        ThreadingHTTPServer, so a long answer blocks nobody else. The grant is
+        read ONCE, at the handshake, because it is single-use; the day it buys
+        is the day this thread is about.
+        """
+        key = self.headers.get("Sec-WebSocket-Key")
+        if not key:
+            self.send_error(400)
+            return
+        accept = base64.b64encode(hashlib.sha1((key + GUID).encode()).digest()).decode()  # noqa: S324
+        self.wfile.write(("HTTP/1.1 101 Switching Protocols\r\n"
+                          "Upgrade: websocket\r\nConnection: Upgrade\r\n"
+                          f"Sec-WebSocket-Accept: {accept}\r\n\r\n").encode())
+        self.wfile.flush()
+
+        user = self.headers.get("x-leo-user-id") or ""
+        brief = day_brief(self.headers.get("x-leo-acting-grant"))
+        sock = self.connection
+        while True:
+            try:
+                raw = ws_read(sock)
+            except Exception:  # noqa: BLE001
+                return
+            if raw is None:
+                return
+            if not raw:
+                continue
+            try:
+                frame = json.loads(raw.decode())
+            except Exception:  # noqa: BLE001
+                continue
+            if frame.get("type") != "message":
+                continue
+            said = (frame.get("content") or "").strip()
+            if not said:
+                continue
+            rows = remember(user, "user", said)
+            turns = [{"role": "assistant" if r["role"] == "assistant" else "user",
+                      "content": r["content"]} for r in rows[-12:]]
+            try:
+                answer = ask_claude(SYSTEM.format(brief=brief), turns)
+            except urllib.error.HTTPError as e:
+                detail = e.read().decode()[:200]
+                # A refusal is the hub's sentence, not a crash: the element
+                # draws `error` and the thread stays open.
+                sock.sendall(ws_frame(json.dumps(
+                    {"type": "error", "message": f"the hub refused the model call ({e.code}): {detail}"})))
+                continue
+            except Exception as e:  # noqa: BLE001
+                sock.sendall(ws_frame(json.dumps(
+                    {"type": "error", "message": f"{type(e).__name__}: {e}"})))
+                continue
+            remember(user, "assistant", answer)
+            sock.sendall(ws_frame(json.dumps({"type": "result", "content": answer})))
 
     def log_message(self, *a):  # the unit's journal is noisy enough
         pass
