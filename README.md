@@ -77,15 +77,51 @@ leo packages preview today.html --data samples/error.json   --out /tmp/error.png
 leo packages preview today.html --data samples/awkward.json --phone --out /tmp/phone.png
 ```
 
+## Ask
+
+At the foot of the page is a thread. `<conversation>` **draws nothing** — it
+owns the socket and the transcript and hands the markup a scope, so the turns
+are Today's own type and spacing rather than a chat window dropped onto the
+page. The composer is markup too.
+
+The socket is this process. The app proxy bridges a WebSocket upgrade at
+`/p/today/chat` straight through to it with no per-app code, stamping the
+asker's identity **and a single-use acting grant** on the handshake exactly as
+it does on a UI-data request — so the thread is told whose day it is about and
+can answer from the same data the page is showing.
+
+It sits at the foot deliberately: the blocks above keep their places whatever
+is said here. A page that re-arranged itself while you talked to it would cost
+you the one thing a glance page is for.
+
+**The model comes from the hub.** This package holds no key and names no
+model: it sends `work: conversation` and the household's own routing, ceiling
+and costs page apply. One wrinkle, worth knowing if the thread answers with an
+error on a fresh hub — the built-in model catalog prices exactly **one** model,
+so the household default (`claude-opus-5`) is refused for a package call:
+
+> model `claude-opus-5` is in this hub's catalog but declares no rate, so a
+> call to it would be billed at $0 and would never count against the household
+> ceiling
+
+That refusal is right — billing a package at zero is worse than refusing it —
+but it means no package can ask a model at all until someone edits
+`model_catalog`. So on exactly that refusal this asks again as
+`periodic_check`, the work class that routes to the `fast` role, which is the
+one priced entry. Still never naming a model. Pricing your real default is the
+owner's to do, and then the first call succeeds.
+
 ## What it does not do yet
 
-- **No agent to ask.** The language has a `<conversation>` element, so a thread
-  on this page is markup plus two routes this process would have to serve. It
-  is the obvious next thing and deliberately not faked.
 - **Three sources.** Calendar, reminders, feed. Adding a fourth is a function
   and a scope, and the markup only changes if the block is a new *shape*.
 - **The ordering is fixed**, not scored. Blocks appear in a set order; only
   their presence varies.
+- **The thread does not stream.** It answers in one `result` frame. The
+  element handles a streamed turn (`live.text` is already in the markup);
+  this process just doesn't send deltas yet.
+- **The thread cannot act.** It answers about the day; it cannot tick
+  something off for you.
 
 ## Scopes it asks for
 
