@@ -59,6 +59,6 @@
     "bin": "leo-today",
     "port": 8477,
     "supervised": false,
-    "rev": "190f4cd605861b5dfcd5f4facdc0d1168780aa53"
+    "rev": "116183a52adfdcd533beb01007098248132a9b55"
   }
 }
