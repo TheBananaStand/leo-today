@@ -28,6 +28,7 @@ the same inputs.
 
 import json
 import os
+import zlib
 import re
 import sys
 import threading
@@ -56,6 +57,17 @@ SHOWN = 6
 DAY_FROM, DAY_TO = 7 * 60, 19 * 60
 
 TINTS = ["blue", "purple", "teal", "orange", "green", "pink", "amber"]
+
+
+def hue(name):
+    """A stable colour for a name.
+
+    `hash()` of a str is salted per PROCESS in Python, so a calendar that was
+    purple before a restart came back amber after one — and a colour that
+    changes is not an identity, it is decoration. crc32 is the same number on
+    every box, every run, forever.
+    """
+    return TINTS[zlib.crc32((name or "").encode()) % len(TINTS)]
 _lock = threading.Lock()
 
 
@@ -262,7 +274,7 @@ def events(now, _act):
             "where": str(e.get("location") or "")[:60],
             "tomorrow": t.date() > now.date(), "allday": "1" if allday else "",
             "live_now": t <= now <= t + timedelta(minutes=mins),
-            "tint": TINTS[hash(cal) % len(TINTS)] if cal else "blue",
+            "tint": hue(cal) if cal else "blue",
         })
     out.sort(key=lambda r: r["at"])
     seen, unique = set(), []
@@ -319,7 +331,10 @@ BULK_ADDR = re.compile(r"@(?:email\d*|e|mail\d*|em|news|mkt|marketing|info|cs)\.
 # what makes a false subject: "Black Friday SALES" and "Weekly SALES Meeting"
 # share a word and nothing else.
 BLAST = re.compile(r"\b(black friday|cyber monday|% off|\d+% |deals?|sale|save big|"
-                   r"limited time|act now|unsubscribe|webinar|newsletter|coupon)\b", re.I)
+                   r"limited time|act now|unsubscribe|webinar|newsletter|coupon|"
+                   r"info enclosed|special offer|exclusive|you(?:'re| are) invited|"
+                   r"don'?t miss|last chance|ends (?:today|soon)|free trial|"
+                   r"refinanc|home equity|pre-?approved|rates? (?:are|have))\b", re.I)
 FROM = re.compile(r'^\s*"?(?P<name>[^"<]{1,60}?)"?\s*<(?P<addr>[^>]+)>\s*$')
 
 
@@ -488,7 +503,7 @@ def build_threads(items, now):
             bits.append(f"next {short_when(soonest, now)}")
         todo = next((m for m in members if m["kind"] == "task"), None)
         out.append({
-            "id": word, "tint": TINTS[hash(word) % len(TINTS)],
+            "id": word, "tint": hue(word),
             "icon": KIND_ICON.get(next(iter(sorted(kinds))), "sparkles"),
             "title": word.capitalize(),
             "state": " · ".join(bits) + ".",
