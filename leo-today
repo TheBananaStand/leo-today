@@ -217,6 +217,9 @@ def short_when(t, now):
 
 def due_words(d, today):
     late = (today - d).days
+    if late > 45:
+        months = max(1, round(late / 30))
+        return f"{months} month{'s' if months > 1 else ''}", False
     if late > 1:
         return f"{late} days late", True
     if late == 1:
@@ -262,7 +265,14 @@ def events(now, _act):
             "tint": TINTS[hash(cal) % len(TINTS)] if cal else "blue",
         })
     out.sort(key=lambda r: r["at"])
-    return out
+    seen, unique = set(), []
+    for e in out:
+        key = (e["title"].strip().lower(), e["at"])
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(e)
+    return unique
 
 
 def tasks(now, act):
@@ -278,7 +288,8 @@ def tasks(now, act):
         words, late = due_words(d.date(), today)
         out.append({"id": str(r.get("id") or len(out)), "title": str(r.get("title") or "Untitled"),
                     "when": words, "late": "1" if late else "", "sort": (today - d.date()).days})
-    out.sort(key=lambda r: -r["sort"])
+    # Genuinely late first, then by how late; the abandoned sink.
+    out.sort(key=lambda r: (not r["late"], -r["sort"]))
     return out
 
 
@@ -502,7 +513,7 @@ def day_strip(evs, now):
                            "tint": "", "label": gap_label(s - cursor) if interior else ""})
         if t > s:
             blocks.append({"id": e["id"], "span": str(t - s), "free": "", "tint": e["tint"],
-                           "label": e["title"]})
+                           "label": strip_label(e["title"], t - s)})
         cursor = max(cursor, t)
     if hi > cursor:
         blocks.append({"id": "fz", "span": str(hi - cursor), "free": "1", "tint": "",
@@ -516,6 +527,38 @@ def day_strip(evs, now):
         note += f" · {biggest // 60}h clear"
     return blocks, at, {"from": f"{lo // 60:02d}:{lo % 60:02d}",
                         "to": f"{hi // 60:02d}:{hi % 60:02d}", "note": note}
+
+
+STRIP_NOISE = re.compile(r"\b(meeting|call|sync|standup|review|session|appointment|1:1)\b", re.I)
+
+
+def strip_label(title, span):
+    """The shortest name that is still the thing, for the width there is.
+
+    Roughly eight characters fit per 30 minutes. Dropping the word every
+    entry shares — "Meeting" — buys back more room than truncating does,
+    because what distinguishes two entries is never the word they have in
+    common.
+    """
+    room = max(0, (span // 30) * 8)
+    if room < 6:
+        return ""
+    # Only from the END, and never the last word standing. Stripping a
+    # noise word wherever it appeared turned "Standup with the build team"
+    # into "with": the word every entry shares is only safe to drop when it
+    # is the one trailing the name, not when it is the name's head.
+    parts = title.strip().split()
+    while len(parts) > 1 and STRIP_NOISE.fullmatch(parts[-1]):
+        parts.pop()
+    name = " ".join(parts).strip(" -–—·,") or title.strip()
+    if len(name) <= room:
+        return name
+    cut = name[:room].rsplit(" ", 1)[0]
+    # A label should not end on a preposition — "1:1 with" reads as cut off
+    # by accident rather than shortened on purpose.
+    while " " in cut and cut.rsplit(" ", 1)[-1].lower() in STOP:
+        cut = cut.rsplit(" ", 1)[0]
+    return cut if len(cut) >= 3 else name[:room]
 
 
 def gap_label(span):
@@ -613,7 +656,10 @@ def payload(grant=None, user=""):
             d["strip_from"], d["strip_to"], d["strip_note"] = span["from"], span["to"], span["note"]
         timed = [e for e in evs if not e["allday"]]
         nxt = next((e for e in timed if e["at"] >= now), None) or (timed or evs)[-1]
-        d["now"] = {"lead": lead(nxt["at"], now), "time": clock(nxt["at"]),
+        phrase = lead(nxt["at"], now)
+        if nxt["at"].date() != now.date():
+            phrase = phrase.rsplit(" ", 1)[0]  # the time is beside it already
+        d["now"] = {"lead": phrase, "time": clock(nxt["at"]),
                     "title": nxt["title"],
                     "where": " · ".join(x for x in (nxt["where"], f"{nxt['mins']}m") if x),
                     "join": "", "faces": []}
@@ -622,7 +668,8 @@ def payload(grant=None, user=""):
             rail.append({"id": e["id"], "time": clock(e["at"]), "title": e["title"],
                          "tint": e["tint"], "free": "", "what": "",
                          "done": "1" if e["at"] + timedelta(minutes=e["mins"]) < now else "",
-                         "live": "1" if e["at"] <= now <= e["at"] + timedelta(minutes=e["mins"]) else "",
+                         "live": "1" if (not e["allday"]
+                                         and e["at"] <= now <= e["at"] + timedelta(minutes=e["mins"])) else "",
                          "last": "1" if i == len(today[:SHOWN]) - 1 else "",
                          "leave": "", "tight": tight_note(today, i)})
         if rail:
@@ -649,6 +696,12 @@ def payload(grant=None, user=""):
     if threads:
         d["threads"] = threads
         d["threads_note"] = f"{len(threads)} subjects, {sum(len(t['strands']) for t in threads)} items"
+    elif items:
+        kinds = len({i["kind"] for i in items})
+        d["no_threads"] = (
+            f"Nothing spans two places today — {len(items)} items across {kinds} "
+            f"{'source' if kinds == 1 else 'sources'}, none of them about the same thing."
+        )
 
     # Whatever no subject claimed, and only what is due
     loose = [{"id": i["id"], "what": i["text"][:90], "when": i.get("when", ""),

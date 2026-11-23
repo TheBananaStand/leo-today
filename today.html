@@ -123,7 +123,7 @@
          where you are in it. Both come from `grow`, so the shape is the
          payload's and nothing here computes. -->
     <section if="strip" id="strip" class="flex flex-col gap-1.5">
-      <div class="flex items-stretch gap-1 h-12">
+      <div class="flex items-stretch gap-1 h-12 p-1 rounded-xl bg-surface">
         <div each="b in strip" id="b-{b.id}" grow="{b.span}" tint="{b.tint}" class="flex min-w-0">
           <div if="!b.free" class="flex flex-1 items-center px-2.5 rounded-lg overflow-hidden bg-tint-wash">
             <span class="text-xs font-medium text-tint truncate">{b.label}</span>
@@ -158,29 +158,34 @@
       <a id="retry" action="refresh" class="mt-1 h-11 px-5 flex items-center rounded-lg text-sm font-medium bg-elevated">Try again</a>
     </div>
 
+    <header if="now" id="now" class="flex items-center gap-5 p-4 rounded-2xl bg-surface">
+      <div class="flex flex-col gap-0.5 shrink-0">
+        <span class="text-xs font-semibold text-accent uppercase">{now.lead}</span>
+        <span class="text-4xl font-bold tabular-nums">{now.time}</span>
+      </div>
+      <div class="flex flex-col gap-0.5 min-w-0 flex-1">
+        <span class="text-base font-medium line-clamp-1">{now.title}</span>
+        <span if="now.where" class="text-xs text-muted truncate">{now.where}</span>
+      </div>
+      <div if="now.faces" class="hidden md:flex items-center gap-1.5 shrink-0">
+        <span each="f in now.faces" id="nf-{f.id}" tint="{f.tint}"
+              class="size-8 flex items-center justify-center rounded-full bg-tint-wash">
+          <span class="text-xs font-semibold text-tint">{f.initials}</span>
+        </span>
+      </div>
+      <a if="now.join" id="join" action="join" shortcut="enter"
+         class="shrink-0 h-10 px-5 flex items-center rounded-lg text-sm font-semibold bg-accent text-on-accent">{now.join}</a>
+    </header>
+
     <div class="grid gap-5 lg:grid-cols-[1.45fr_1fr]">
 
       <!-- ---------- LEFT: the work, by subject ---------- -->
       <div class="flex flex-col gap-5 min-w-0">
 
-        <header if="now" id="now" class="flex items-start gap-4 p-4 rounded-2xl bg-surface">
-          <div class="flex flex-col gap-0.5 min-w-0 flex-1">
-            <span class="text-xs font-semibold text-accent uppercase">{now.lead}</span>
-            <span class="text-4xl font-bold tabular-nums">{now.time}</span>
-            <span class="text-base text-secondary line-clamp-1">{now.title}</span>
-            <span if="now.where" class="text-xs text-muted truncate">{now.where}</span>
-          </div>
-          <div class="flex flex-col items-end gap-2 shrink-0">
-            <div if="now.faces" class="flex items-center gap-1.5">
-              <span each="f in now.faces" id="nf-{f.id}" tint="{f.tint}"
-                    class="size-8 flex items-center justify-center rounded-full bg-tint-wash">
-                <span class="text-xs font-semibold text-tint">{f.initials}</span>
-              </span>
-            </div>
-            <a if="now.join" id="join" action="join" shortcut="enter"
-               class="h-9 px-4 flex items-center rounded-lg text-xs font-semibold bg-accent text-on-accent">{now.join}</a>
-          </div>
-        </header>
+        <div if="no_threads" id="no-threads" class="flex items-center gap-3 px-4 py-3 rounded-2xl bg-surface">
+          <img icon="square.grid.2x2" alt="" class="size-4 shrink-0 text-muted">
+          <span class="text-xs text-muted line-clamp-2">{no_threads}</span>
+        </div>
 
         <section if="threads" id="threads" class="flex flex-col gap-3">
           <div class="flex items-end justify-between gap-4">
@@ -188,21 +193,6 @@
             <span class="text-xs text-muted">{threads_note}</span>
           </div>
           <use template="thread" each="t in threads"></use>
-        </section>
-
-      </div>
-
-      <!-- ---------- RIGHT: time, and the world ---------- -->
-      <div class="flex flex-col gap-5 min-w-0">
-
-        <section if="rail" id="day" class="flex flex-col gap-3">
-          <div class="flex items-end justify-between gap-4">
-            <h2 class="text-xs font-semibold text-muted uppercase">The day</h2>
-            <span class="text-xs text-muted tabular-nums">{rail_note}</span>
-          </div>
-          <ul class="flex flex-col p-4 pb-0 rounded-2xl bg-surface">
-            <use template="moment" each="m in rail"></use>
-          </ul>
         </section>
 
         <section if="loose" id="loose" class="flex flex-col gap-3">
@@ -214,6 +204,21 @@
             <use template="loose" each="x in loose"></use>
           </ul>
         </section>
+      </div>
+
+      <!-- ---------- RIGHT: time, and the world ---------- -->
+      <div class="flex flex-col gap-5 min-w-0">
+        <section if="rail" id="day" class="flex flex-col gap-3">
+          <div class="flex items-end justify-between gap-4">
+            <h2 class="text-xs font-semibold text-muted uppercase">The day</h2>
+            <span class="text-xs text-muted tabular-nums">{rail_note}</span>
+          </div>
+          <ul class="flex flex-col p-4 pb-0 rounded-2xl bg-surface">
+            <use template="moment" each="m in rail"></use>
+          </ul>
+        </section>
+
+
         <section if="house" id="house" class="flex flex-col gap-3">
           <h2 class="text-xs font-semibold text-muted uppercase">The house</h2>
           <ul class="flex flex-col rounded-2xl bg-surface overflow-hidden">
