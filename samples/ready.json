@@ -21,6 +21,40 @@
   "symbol": "cloud.sun",
   "tint": "blue"
  },
+ "tiles": [
+  {
+   "id": "mail",
+   "label": "Mail",
+   "n": "1",
+   "icon": "envelope",
+   "tint": "blue",
+   "route": "/inbox"
+  },
+  {
+   "id": "cal",
+   "label": "Events",
+   "n": "2",
+   "icon": "calendar",
+   "tint": "purple",
+   "route": "/calendar"
+  },
+  {
+   "id": "due",
+   "label": "Due",
+   "n": "3",
+   "icon": "checklist",
+   "tint": "orange",
+   "route": "/reminders"
+  },
+  {
+   "id": "home",
+   "label": "Home",
+   "n": "1",
+   "icon": "house",
+   "tint": "green",
+   "route": "/dashboard"
+  }
+ ],
  "rail": [
   {
    "id": "2",
@@ -76,6 +110,7 @@
    "tint": "pink",
    "icon": "checklist",
    "note": "4 items",
+   "count": "4",
    "rows": [
     {
      "id": "s0-mm1",
@@ -138,6 +173,7 @@
    "tint": "orange",
    "icon": "checklist",
    "note": "1 item",
+   "count": "1",
    "rows": [
     {
      "id": "s1-tr2",
@@ -161,6 +197,7 @@
    "tint": "gray",
    "icon": "tray",
    "note": "10 items",
+   "count": "10",
    "rows": [
     {
      "id": "rest-e2",
@@ -246,7 +283,7 @@
      "icon": "sparkles",
      "tint": "teal",
      "what": "Amex is running hot",
-     "when": "19:38",
+     "when": "19:41",
      "late": "",
      "route": "/feed?selected=f1",
      "dim": "",
@@ -295,6 +332,7 @@
    ]
   }
  ],
+ "all_note": "15 items",
  "brief": {
   "focus": [
    {

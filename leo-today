@@ -650,8 +650,13 @@ Answer ONLY with JSON:
  "subjects": [{"title": "...", "state": "...", "ids": ["..."]}]}
 
 - subjects: group the items by what they are ABOUT, across sources — a person,
-  a project, a trip, a bill, the house, work. A message, a reminder and a
-  meeting about the same thing belong together. Two to six subjects.
+  a project, a trip, the house, work, money. A message, a reminder and a
+  meeting about the same thing belong together. THREE TO FIVE subjects.
+  The point is the bigger picture, so a subject of ONE item is a failure
+  unless that item truly stands alone and matters: when things are not about
+  the same specific thing, group them by the part of life they belong to
+  ("Work", "Family", "Around the house", "Leo hub"). Finished meetings and
+  small facts go with their area too — they are context, not clutter.
     title: the person's own noun for it, four words at most. Never a source
            name ("Email", "Calendar", "Reminders").
     state: where it stands, in one line of fourteen words at most.
@@ -1164,16 +1169,18 @@ def subjects(items):
 
 SUBJECT_ICON = {"mail": "envelope", "event": "calendar", "task": "checklist", "home": "house",
                 "hub": "server.rack", "note": "sparkles", "people": "person.2", "money": "creditcard"}
-_scene = "clear-day"
+_scene = ""
 
 
-def scene_for(condition, now):
-    """Which sky the hero draws: the weather's word, and whether it is dark."""
-    c = condition.lower()
-    kind = ("storm" if "thunder" in c or "storm" in c else "snow" if "snow" in c or "sleet" in c
-            else "rain" if "rain" in c or "drizzle" in c or "shower" in c
-            else "fog" if "fog" in c or "mist" in c or "haze" in c
-            else "cloud" if "cloud" in c or "overcast" in c else "clear")
+def scene_for(symbol, now):
+    """Which sky the hero draws, from the weather's SF Symbol — the one field
+    that is a vocabulary. `condition` is a tool's prose: it once read "day
+    forecast for Menifee, United States"."""
+    c = symbol.lower()
+    kind = ("storm" if "bolt" in c else "snow" if "snow" in c or "sleet" in c
+            else "rain" if "rain" in c or "drizzle" in c
+            else "fog" if "fog" in c or "haze" in c
+            else "cloud" if "cloud" in c else "clear")
     return f"{kind}-{'day' if 7 <= now.hour < 18 else 'night'}"
 
 
@@ -1433,6 +1440,12 @@ def payload(grant=None, user=""):
         thing("spend", "hub", "cpu", got["spend"]["tint"],
               f"{got['spend']['amount']} on models this month", got["spend"]["note"],
               route="/p/costs/spend")
+    count = lambda k: sum(1 for x in things if x["kind"] == k and x["id"] not in hidden and not x["dim"])  # noqa: E731
+    d["tiles"] = [
+        {"id": "mail", "label": "Mail", "n": str(count("mail")), "icon": "envelope", "tint": "blue", "route": "/inbox"},
+        {"id": "cal", "label": "Events", "n": str(count("event")), "icon": "calendar", "tint": "purple", "route": "/calendar"},
+        {"id": "due", "label": "Due", "n": str(count("task")), "icon": "checklist", "tint": "orange", "route": "/reminders"},
+        {"id": "home", "label": "Home", "n": str(count("home")), "icon": "house", "tint": "green", "route": "/dashboard"}]
     waiting = sum(1 for x in things if x["id"] in st["later"])
     things = [x for x in things if x["id"] not in hidden]
 
@@ -1489,18 +1502,19 @@ def payload(grant=None, user=""):
             lead_ = max(set(kinds), key=kinds.count)
             subjects_.append({"id": f"s{n}", "title": sub_["title"], "state": sub_["state"],
                               "tint": hue(sub_["title"]), "icon": SUBJECT_ICON.get(lead_, "square.stack"),
-                              "note": plural(len(members), "item"), "rows": members})
+                              "note": plural(len(members), "item"), "count": str(len(members)), "rows": members})
     loose = [x for x in things if x["id"] not in placed]
     if loose:
         # Arrived since the grouping was written — or there is no grouping yet.
         subjects_.append({"id": "rest", "title": "Not sorted yet" if held else "Everything",
                           "state": "New since the last look." if held else "Sorting your day into subjects…",
-                          "tint": "gray", "icon": "tray", "note": plural(len(loose), "item"),
+                          "tint": "gray", "icon": "tray", "note": plural(len(loose), "item"), "count": str(len(loose)),
                           "rows": loose})
     for sub_ in subjects_:
         sub_["rows"] = mark_last([dict(x, id=f"{sub_['id']}-{x['id']}", iid=x["id"]) for x in sub_["rows"]])
     if subjects_:
         d["subjects"] = subjects_
+        d["all_note"] = plural(len(things), "item")
     elif not gaps:
         d["zero"] = "1"
 
@@ -1518,7 +1532,7 @@ def payload(grant=None, user=""):
         d["undo"] = f"{verb}: {last['what']}"[:90]
     if got.get("weather"):
         global _scene
-        _scene = scene_for(got["weather"].get("condition", ""), now)
+        _scene = scene_for(got["weather"].get("symbol", ""), now)
 
     told = fixes(user)
     if told:
@@ -1601,7 +1615,7 @@ const drops=Array.from({length:nDrop},()=>({x:R(0,1.2),y:R(0,1),v:R(.6,1.2),l:R(
 let flash=0,last=performance.now();
 function frame(t){const dt=Math.min((t-last)/1000,.05);last=t;
  const g=x.createLinearGradient(0,0,0,H),s=SKY[scene]||SKY["clear-day"];g.addColorStop(0,s[0]);g.addColorStop(1,s[1]);x.fillStyle=g;x.fillRect(0,0,W,H);
- if(kind==="clear"){const cx=W*.82,cy=H*(night?.26:.22),r=H*(night?.09:.13);
+ if(kind==="clear"){const cx=W*.93,cy=H*.86,r=H*(night?.16:.22);
   const h=x.createRadialGradient(cx,cy,0,cx,cy,r*4.5);h.addColorStop(0,night?"rgba(210,225,255,.30)":"rgba(255,236,170,.55)");h.addColorStop(1,"rgba(255,255,255,0)");
   x.fillStyle=h;x.fillRect(0,0,W,H);x.beginPath();x.arc(cx,cy,r*(1+.02*Math.sin(t/900)),0,7);x.fillStyle=night?"#e8eefc":"#fff3c4";x.fill()}
  for(const st of stars){x.globalAlpha=.35+.55*Math.abs(Math.sin(t/1000*st.s+st.p));x.beginPath();x.arc(st.x*W,st.y*H,st.r*D,0,7);x.fillStyle="#fff";x.fill()}x.globalAlpha=1;
@@ -1616,6 +1630,8 @@ function frame(t){const dt=Math.min((t-last)/1000,.05);last=t;
  if(kind==="storm"){if(Math.random()<.004)flash=1;if(flash>0){x.fillStyle=`rgba(235,240,255,${flash*.55})`;x.fillRect(0,0,W,H);flash-=dt*3.2}}
  requestAnimationFrame(frame)}
 requestAnimationFrame(frame);
+setInterval(()=>fetch(location.pathname+"?scene"+(location.search?"&"+location.search.slice(1):""))
+  .then(r=>r.text()).then(s=>{if(s&&s!==scene&&/^[a-z]+-[a-z]+$/.test(s))location.reload()}).catch(()=>{}),15000);
 </script>"""
 
 # ---------------------------------------------------------------------------
@@ -1679,7 +1695,20 @@ class Handler(BaseHTTPRequestHandler):
         elif path.rstrip("/").endswith("/sky"):
             # The hero's wallpaper: the weather outside, moving. A `webPane`
             # asks for it through the hub's app proxy (`/p/today/sky`).
-            blob = SKY_HTML.replace("__SCENE__", _scene).encode()
+            # The pane asks for this the moment the page draws — often BEFORE
+            # the first payload has heard from the weather. So with no scene
+            # yet it draws the hour alone, and the page re-asks (`?scene`).
+            scene = _scene or f"cloud-{'day' if 7 <= datetime.now().hour < 18 else 'night'}"
+            if "scene" in self.path.split("?", 1)[-1]:
+                blob = scene.encode()
+                self.send_response(200)
+                self.send_header("content-type", "text/plain")
+                self.send_header("cache-control", "no-store")
+                self.send_header("content-length", str(len(blob)))
+                self.end_headers()
+                self.wfile.write(blob)
+                return
+            blob = SKY_HTML.replace("__SCENE__", scene).encode()
             self.send_response(200)
             self.send_header("content-type", "text/html; charset=utf-8")
             self.send_header("cache-control", "no-store")

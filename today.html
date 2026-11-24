@@ -1,4 +1,4 @@
-<div id="today" subset="15" class="h-full flex flex-col overflow-y-auto bg-canvas">
+<div id="today" subset="15" class="h-full flex bg-canvas">
 
   <!-- One place instead of five apps. A model sorts everything the hub knows
        — mail, calendar, reminders, the house, the hub itself — into SUBJECTS,
@@ -90,7 +90,58 @@
     </li>
   </template>
 
-  <div class="flex flex-col gap-6 w-full max-w-6xl mx-auto px-6 py-6">
+
+  <!-- ---------- SIDEBAR: the apps you would otherwise open, as counts;
+       the subjects, as a list; the clock side of the day. ---------- -->
+  <aside id="side" class="hidden md:flex flex-col gap-6 w-72 shrink-0 p-4 overflow-y-auto border-r">
+    <div class="grid grid-cols-2 gap-2">
+      <a each="t in tiles" id="tile-{t.id}" action="open" args="route={t.route}" tint="{t.tint}"
+         class="flex flex-col gap-3 p-3 rounded-xl bg-surface">
+        <div class="flex items-center justify-between">
+          <img icon="{t.icon}" alt="" class="size-5 text-tint">
+          <span class="text-xl font-bold tabular-nums">{t.n}</span>
+        </div>
+        <span class="text-xs font-medium text-secondary">{t.label}</span>
+      </a>
+    </div>
+
+    <nav if="subjects" id="nav" class="flex flex-col gap-1">
+      <h2 class="px-2 pb-1 text-xs font-semibold text-secondary uppercase">Subjects</h2>
+      <a id="nav-all" select="sub=" selected="sub="
+         class="flex items-center gap-3 min-h-9 px-2 rounded-lg selected:bg-elevated">
+        <img icon="square.stack" alt="" class="size-4 text-muted">
+        <span class="flex-1 min-w-0 text-sm truncate">Everything</span>
+        <span class="text-xs text-muted tabular-nums">{all_note}</span>
+      </a>
+      <a each="s in subjects" id="nav-{s.id}" select="sub={s.id}" selected="sub={s.id}" tint="{s.tint}"
+         class="flex items-center gap-3 min-h-9 px-2 rounded-lg selected:bg-elevated">
+        <span class="size-2 mx-1 shrink-0 rounded-full bg-tint"></span>
+        <span class="flex-1 min-w-0 text-sm truncate">{s.title}</span>
+        <span class="text-xs text-muted tabular-nums">{s.count}</span>
+      </a>
+    </nav>
+
+    <section if="rail" id="day" class="flex flex-col gap-3">
+      <h2 class="text-xs font-semibold text-secondary uppercase">Today</h2>
+      <ul class="flex flex-col p-4 pb-0 rounded-xl bg-surface">
+        <use template="moment" each="m in rail"></use>
+      </ul>
+    </section>
+
+    <a if="now" id="now" action="open" args="route={now.route}"
+       class="flex flex-col gap-1 p-3 rounded-xl bg-surface">
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-semibold text-secondary uppercase">{now.lead}</span>
+        <span class="text-xs font-semibold tabular-nums">{now.time}</span>
+      </div>
+      <span class="text-sm line-clamp-2">{now.title}</span>
+    </a>
+    <span if="gaps_line" id="gaps" class="px-2 text-xs text-muted line-clamp-2">{gaps_line}</span>
+  </aside>
+
+  <!-- ---------- MAIN: the hero, then the day by subject ---------- -->
+  <main id="main" class="flex-1 min-w-0 overflow-y-auto">
+    <div class="flex flex-col gap-5 w-full max-w-4xl mx-auto px-6 py-6">
 
     <!-- ===================== THE HERO =====================
          The sky outside, moving, and over it the two things the page is
@@ -111,7 +162,7 @@
               <img icon="{weather.symbol}" alt="" tint="{weather.tint}" class="size-6 text-tint">
               <span class="text-3xl font-bold tabular-nums">{weather.temp}</span>
             </div>
-            <span class="text-xs text-secondary tabular-nums">{weather.condition} · {weather.range}</span>
+            <span class="text-xs text-secondary tabular-nums">{weather.range}</span>
           </div>
         </div>
 
@@ -174,70 +225,53 @@
          class="mt-1 h-10 px-5 flex items-center rounded-lg text-sm font-semibold bg-accent text-on-accent">Try again</a>
     </div>
 
-    <div class="grid gap-6 lg:grid-cols-[1fr_320px]">
 
-      <!-- ---------- MAIN: the day, by subject ---------- -->
-      <main id="subjects" class="flex flex-col gap-4 min-w-0">
-        <div if="undo" id="undo" class="flex items-center gap-3 min-h-10 pl-4 pr-1 rounded-xl bg-surface">
-          <span class="flex-1 min-w-0 text-xs text-secondary truncate">{undo}</span>
-          <a id="undo-press" action="undo" shortcut="z"
-             class="shrink-0 min-h-8 px-3 flex items-center rounded-full text-xs font-semibold text-accent">Undo</a>
-        </div>
-        <use template="subject" each="s in subjects"></use>
-        <div if="zero" id="zero" class="flex flex-col items-center gap-2 py-14 rounded-xl bg-surface">
-          <img icon="checkmark.circle" alt="" tint="green" class="size-10 text-tint">
-          <span class="text-lg font-semibold">Nothing needs you</span>
-        </div>
-        <span if="later_note" class="px-1 text-xs text-muted">{later_note}</span>
-      </main>
+      <div if="undo" id="undo" class="flex items-center gap-3 min-h-10 pl-4 pr-1 rounded-xl bg-surface">
+        <span class="flex-1 min-w-0 text-xs text-secondary truncate">{undo}</span>
+        <a id="undo-press" action="undo" shortcut="z"
+           class="shrink-0 min-h-8 px-3 flex items-center rounded-full text-xs font-semibold text-accent">Undo</a>
+      </div>
 
-      <!-- ---------- SIDEBAR: the clock side of the day, and Ask ---------- -->
-      <aside id="side" class="flex flex-col gap-6 min-w-0">
-        <section if="rail" id="day" class="flex flex-col gap-3">
-          <h2 class="text-xs font-semibold text-secondary uppercase">Today</h2>
-          <ul class="flex flex-col p-4 pb-0 rounded-xl bg-surface">
-            <use template="moment" each="m in rail"></use>
-          </ul>
-        </section>
-        <a if="now" id="now" action="open" args="route={now.route}"
-           class="flex flex-col gap-1 p-4 rounded-xl bg-surface">
-          <div class="flex items-center gap-2">
-            <span class="text-xs font-semibold text-secondary uppercase">{now.lead}</span>
-            <span class="text-xs font-semibold tabular-nums">{now.time}</span>
+      <!-- Everything, or the one subject picked in the sidebar. Two stamps
+           because `if` has no "or": one asks "nothing picked", the other
+           asks each subject whether it is the one. -->
+      <use template="subject" each="s in subjects" if="!$.sub"></use>
+      <use template="subject" each="s in subjects" if="$.sub == {s.id}"></use>
+
+      <div if="zero" id="zero" class="flex flex-col items-center gap-2 py-14 rounded-xl bg-surface">
+        <img icon="checkmark.circle" alt="" tint="green" class="size-10 text-tint">
+        <span class="text-lg font-semibold">Nothing needs you</span>
+      </div>
+      <span if="later_note" class="px-1 text-xs text-muted">{later_note}</span>
+
+      <section if="!nothing_worked" id="ask" class="flex flex-col gap-3">
+        <h2 class="text-xs font-semibold text-secondary uppercase">Ask</h2>
+        <div class="flex flex-col gap-3 p-3 rounded-xl bg-surface">
+          <div if="asking" id="asking" class="flex items-center gap-2 min-h-8 px-1">
+            <span class="size-1.5 shrink-0 rounded-full bg-accent animate-pulse"></span>
+            <span class="flex-1 min-w-0 text-sm text-secondary truncate">{asking}</span>
           </div>
-          <span class="text-sm line-clamp-2">{now.title}</span>
-        </a>
-
-        <section if="!nothing_worked" id="ask" class="flex flex-col gap-3">
-          <h2 class="text-xs font-semibold text-secondary uppercase">Ask</h2>
-          <div class="flex flex-col gap-3 p-3 rounded-xl bg-surface">
-            <div if="asking" id="asking" class="flex items-center gap-2 min-h-8 px-1">
-              <span class="size-1.5 shrink-0 rounded-full bg-accent animate-pulse"></span>
-              <span class="flex-1 min-w-0 text-sm text-secondary truncate">{asking}</span>
+          <div if="answer" id="answer" class="flex flex-col gap-2 px-1">
+            <div class="flex items-start gap-2">
+              <span class="flex-1 min-w-0 text-sm font-semibold line-clamp-2">{answer.question}</span>
+              <a id="clear-answer" action="clear" aria-label="Clear this answer"
+                 class="shrink-0 size-8 -mr-2 -mt-1 flex items-center justify-center rounded-full">
+                <img icon="xmark" alt="" class="size-3 text-muted">
+              </a>
             </div>
-            <div if="answer" id="answer" class="flex flex-col gap-2 px-1">
-              <div class="flex items-start gap-2">
-                <span class="flex-1 min-w-0 text-sm font-semibold line-clamp-2">{answer.question}</span>
-                <a id="clear-answer" action="clear" aria-label="Clear this answer"
-                   class="shrink-0 size-8 -mr-2 -mt-1 flex items-center justify-center rounded-full">
-                  <img icon="xmark" alt="" class="size-3 text-muted">
-                </a>
-              </div>
-              <markdown if="answer.text" class="text-sm select-text">{answer.text}</markdown>
-              <span if="answer.failed" class="text-xs text-muted">Couldn't answer — {answer.failed}</span>
-            </div>
-            <form id="compose" action="ask" args="text={$.form.message}" class="flex items-center gap-2">
-              <input id="ask-field" bind="form.message" placeholder="Ask about today" shortcut="/" required
-                     class="flex-1 h-10 min-w-0">
-              <button id="ask-send" action="ask" args="text={$.form.message}"
-                      disabled="!$.form.message"
-                      class="shrink-0 h-10 px-4 rounded-lg bg-accent text-on-accent">Ask</button>
-            </form>
+            <markdown if="answer.text" class="text-sm select-text">{answer.text}</markdown>
+            <span if="answer.failed" class="text-xs text-muted">Couldn't answer — {answer.failed}</span>
           </div>
-        </section>
+          <form id="compose" action="ask" args="text={$.form.message}" class="flex items-center gap-2">
+            <input id="ask-field" bind="form.message" placeholder="Ask about today" shortcut="/" required
+                   class="flex-1 h-10 min-w-0">
+            <button id="ask-send" action="ask" args="text={$.form.message}"
+                    disabled="!$.form.message"
+                    class="shrink-0 h-10 px-4 rounded-lg bg-accent text-on-accent">Ask</button>
+          </form>
+        </div>
+      </section>
 
-        <span if="gaps_line" id="gaps" class="px-1 text-xs text-muted line-clamp-2">{gaps_line}</span>
-      </aside>
     </div>
-  </div>
+  </main>
 </div>

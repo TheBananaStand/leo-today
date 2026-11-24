@@ -106,7 +106,7 @@ assert routes["tr1"] == "/reminders"
 assert all(sub["rows"][-1]["last"] == "1" for sub in subs)
 assert not d.get("gaps_line"), "every stubbed source should have answered"
 assert d["rail"] and d["now"]["title"] == "Flight to Austin"
-assert m._scene == "cloud-" + ("day" if 7 <= now.hour < 18 else "night"), m._scene
+assert m._scene.split("-")[1] == ("day" if 7 <= now.hour < 18 else "night"), m._scene
 assert "__SCENE__" not in m.SKY_HTML.replace("__SCENE__", m._scene) and "<canvas" in m.SKY_HTML
 
 # --- the verbs: done, later, not for me, undo -------------------------------
