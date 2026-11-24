@@ -17,6 +17,21 @@ leo packages disable today && leo packages enable today   # respawn, so it picks
 
 Then open **Today** in the sidebar, or go to `/p/today/today`.
 
+**After a remove + reinstall, cycle it once more:**
+
+```bash
+leo packages disable today && leo packages enable today
+```
+
+An install writes the page into `dynamic_packages` but does not rebuild the
+hub's live route table, so `/api/native-routes` comes back WITHOUT
+`/p/today/today` while `leo packages show today` cheerfully prints
+`pages: /p/today/today`. A tab that was already open keeps working — it has
+the route — so the breakage is invisible from the window you are testing in,
+and every NEW window gets the Mac app's "Today has no web page. Leo draws
+this app itself. Your app hasn't noticed it yet" fallback, which reads as a
+client-side cache problem and is not one. The disable/enable rebuilds it.
+
 ## The token, and why that step exists
 
 A package declares what it needs to read as `entitlements.graph_scopes`, and
