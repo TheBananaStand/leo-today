@@ -312,8 +312,18 @@ json.dump({"seq": 7, "subjects": [{"sid": "s7", "title": "Auto loan past due", "
           open(m.subjects_path(_MU), "w"))
 _mig = m.load_subjects(_MU)
 assert _mig["subjects"] == [], "a record under the old spec must be re-derived, not frozen"
-assert _mig["noise"] == ["n1"] and _mig["background"] == ["b1"] and _mig["asked"] == {"a1": 2}, \
-    "the migration must keep what grouping does not decide"
+# A migration keeps what the new question does not change its mind about, and
+# drops every judgement the old one made. This assertion used to require the
+# opposite for `asked` and `background`, and that belief is what suppressed the
+# owner's mail: `asked` counts times the model DECLINED to place an item, two
+# is the stuck threshold, so an item asked once under the old question and once
+# under the new one vanished without ever being declined under the spec in
+# force. Measured live: 17 asked entries, 8 at 2, Mail tile 0 against 11.
+assert _mig["noise"] == ["n1"], "noise is a property of the MESSAGE and must survive"
+assert _mig["background"] == [], "background was judged against the old question and must go"
+assert _mig["asked"] == {}, \
+    "asked is a tally against the OLD question — keeping it hides items that were " \
+    "never declined under the new one"
 assert _mig["spec"] == m.SUBJECT_SPEC
 json.dump({"seq": 7, "spec": m.SUBJECT_SPEC,
            "subjects": [{"sid": "s7", "title": "Money", "ids": ["x1"]}]},

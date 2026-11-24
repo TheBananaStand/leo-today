@@ -874,6 +874,31 @@ def load_subjects(user):
             print(f"today: re-deriving {len(subs)} subject(s) for {user} — "
                   f"grouped under {was}, now {SUBJECT_SPEC}", flush=True)
             subs = []
+            # **And `asked` and `background` go with them, which the first cut
+            # got wrong and cost the owner his mail.**
+            #
+            # `noise` survives because "this is marketing" is a property of the
+            # MESSAGE and does not depend on how the rest is grouped. The other
+            # two are not like that:
+            #
+            #   asked       a tally of times the model DECLINED to place an item
+            #               — entirely about the question it was asked. At two
+            #               it is treated as stuck and drops off the page.
+            #   background  "true, but not on their mind", judged against open
+            #               loops. A world it belongs to may not have existed.
+            #
+            # Keeping `asked` across a spec change means an item that was
+            # already asked once under the old question, released by this
+            # migration, is asked ONCE more under the new one, reaches two, and
+            # is hidden — having never been declined under the spec that is now
+            # in force. Measured on the owner's own record: 17 entries, 8 of
+            # them at 2, and the Mail tile read 0 against 11 before.
+            #
+            # The rule: a migration keeps what the new question does not change
+            # its mind about, and drops every judgement the old question made.
+            return {"seq": int(st.get("seq") or len(subs)), "subjects": [],
+                    "noise": list(st.get("noise") or []), "background": [],
+                    "asked": {}, "spec": SUBJECT_SPEC}
         return {"seq": int(st.get("seq") or len(subs)), "subjects": subs,
                 "noise": list(st.get("noise") or []), "background": list(st.get("background") or []),
                 "asked": dict(st.get("asked") or {}), "spec": SUBJECT_SPEC}
