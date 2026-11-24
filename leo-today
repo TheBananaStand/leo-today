@@ -878,7 +878,7 @@ def strip_label(title, span):
     because what distinguishes two entries is never the word they have in
     common.
     """
-    room = max(0, (span // 30) * 8)
+    room = max(0, (span // 30) * 6)
     if room < 6:
         return ""
     # Only from the END, and never the last word standing. Stripping a
@@ -1048,13 +1048,17 @@ def payload(grant=None, user=""):
         )
 
     # Whatever no subject claimed, and only what is due
+    rest = [i for i in items if i["id"] not in used and i["kind"] in ("task", "mail")]
+    # Something a person sent, then something genuinely late, then the
+    # abandoned. Five months of chores at the top buries the one line on the
+    # page somebody is actually waiting on.
+    rest.sort(key=lambda i: (0 if i["kind"] == "mail" else 1 if i.get("late") else 2))
     loose = [{"id": i["id"], "what": i["text"][:90], "when": i.get("when", ""),
               "late": i.get("late", ""), "done": "", "icon": KIND_ICON.get(i["kind"], "circle")}
-             for i in items if i["id"] not in used and i["kind"] in ("task", "mail")]
+             for i in rest]
     if loose:
-        d["loose"] = loose[:SHOWN]
-        d["loose_note"] = f"{min(len(loose), SHOWN)} of {len(loose)}" if len(loose) > SHOWN \
-            else str(len(loose))
+        d["loose"] = loose[:4]
+        d["loose_note"] = f"4 of {len(loose)}" if len(loose) > 4 else str(len(loose))
 
     # The briefing. Cached against what it is about; served stale and
     # rewritten behind the page when that changes. Never blocks.
