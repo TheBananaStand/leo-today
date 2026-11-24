@@ -117,10 +117,19 @@ assert [r["iid"] for r in named["Auto loan past due"]["rows"]] == ["mm3"], "the 
 assert "mm2" not in every and "mm4" not in every, "a promotion or a sales follow-up is on the page"
 assert not any("Newegg" in r["what"] or "patiokits" in r["what"].lower() for sub in subs for r in sub["rows"])
 assert subs[-1]["id"] == "backlog" and [r["iid"] for r in subs[-1]["rows"]] == ["tr2"], "the backlog sits last"
+m.apply_places("selftest", [{"id": "mzz", "to": "backlog"}, {"id": "tzz", "to": "noise"}], {"mzz", "tzz"})
+_r = m.load_subjects("selftest")
+assert "mzz" in _r["background"] and "tzz" in _r["background"] and "tzz" not in _r["noise"], \
+    "mail is never a chore, and only mail can be spam"
 assert subs[-1]["real"] == "", "a pile cannot be swept"
-assert "new" not in [x["id"] for x in subs], "once filed, nothing is left waiting — the unplaced went to the background"
+# What the model SKIPPED is not hidden. The first real run placed 6 of 45 and
+# an earlier rule sent the other 39 to the background — a friend's surgery
+# among them. A skipped item stays on the page under "New", in the open.
 rec = m.load_subjects("selftest")
 assert {"mm2", "mm4"} <= set(rec["noise"]) and "e2" in rec["background"]
+skipped = [r["iid"] for r in subs[0]["rows"]] if subs[0]["id"] == "new" else []
+assert skipped and not set(skipped) & set(rec["background"]), "what the model skipped was hidden instead of shown"
+assert all(not i.startswith("mm") for i in skipped), "unjudged MAIL must never be shown"
 assert next(t for t in d["tiles"] if t["id"] == "mail")["n"] == "2", "the Mail tile counts mail that MATTERS"
 ids = [r["id"] for sub in subs for r in sub["rows"]]
 assert len(ids) == len(set(ids)), "two rows share an element id"
@@ -203,7 +212,7 @@ assert m.ui_action("rename", {"id": sid, "title": "Austin, Thursday"}, "selftest
 d = m.payload("grant", "selftest")
 renamed = next(x for x in d["subjects"] if x["id"] == sid)
 assert renamed["title"] == "Austin, Thursday" and renamed["tint"] == austin["tint"], "a rename must not recolour or move"
-assert [x["id"] for x in d["subjects"]] == [x[0] for x in after], "a rename reordered the page"
+assert [x["id"] for x in d["subjects"] if x["id"] != "new"] == [x[0] for x in after], "a rename reordered the page"
 
 BASE_TOOL = m.tool
 def run_sweep(plan, verdict, results):

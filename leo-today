@@ -653,15 +653,26 @@ place — exactly one entry for EVERY id under NEW ITEMS:
               notice, the reminder and the invoice about the same debt belong
               together whatever app they came from. A subject of ONE item is
               right when that item is a real thing on their mind.
-  to: backlog     a chore or to-do that has sat for weeks with no deadline
-                  biting. Not a story; a pile.
+  to: backlog     REMINDERS ONLY, never mail: a chore or to-do that has sat for
+                  weeks with no deadline biting. Not a story; a pile.
   to: background  true but not on their mind: a routine meeting, a receipt
                   for something finished, a fact, a "completed" notice.
-  to: noise       promotions, sales, coupons, newsletters, brand marketing,
+  to: noise       MAIL ONLY. promotions, sales, coupons, newsletters, brand marketing,
                   "we miss you", pre-approvals and credit offers, donation
                   drives, social digests, rate-your-purchase requests, and a
                   salesperson following up on a quote. They never want to see
                   these. When unsure whether mail is marketing, it is.
+
+Before you open a new subject, look at the titles you have ALREADY used in
+this answer and at the existing subjects: two notices about the same app
+release, or two shipments from the same shop, are ONE subject.
+
+Someone they know going through something (a surgery, a birth, a move), a
+payment that is late, something broken, a meeting or call that is still
+ahead — each of these IS a loop. Never set one aside as background.
+
+A bill, an invoice, a fee or a statement to pay is NEVER noise, even from a
+company that also sends marketing.
 
 MAIL: judge by what the message SAYS, never by who sent it. Automated mail is
 often the most important kind — a payment past due, a bill or invoice to pay,
@@ -802,9 +813,10 @@ def load_subjects(user):
         st = json.load(open(subjects_path(user)))
         subs = [x for x in st.get("subjects") or [] if x.get("sid") and x.get("title")]
         return {"seq": int(st.get("seq") or len(subs)), "subjects": subs,
-                "noise": list(st.get("noise") or []), "background": list(st.get("background") or [])}
+                "noise": list(st.get("noise") or []), "background": list(st.get("background") or []),
+                "asked": dict(st.get("asked") or {})}
     except Exception:  # noqa: BLE001 — nothing grouped yet
-        return {"seq": 0, "subjects": [], "noise": [], "background": []}
+        return {"seq": 0, "subjects": [], "noise": [], "background": [], "asked": {}}
 
 
 def apply_places(user, places, allowed):
@@ -824,6 +836,11 @@ def apply_places(user, places, allowed):
         if iid not in allowed or iid in taken:
             continue                       # invented, or already has a home
         aside = str(pl.get("to") or "").lower()
+        is_mail = iid.startswith("m") and iid != "money"
+        if aside == "backlog" and is_mail:
+            aside = "background"           # mail is never a chore
+        if aside == "noise" and not is_mail:
+            aside = "background"           # only mail can be spam
         if aside in ("noise", "background"):
             st[aside].append(iid)
             taken.add(iid)
@@ -845,7 +862,14 @@ def apply_places(user, places, allowed):
             home["ids"].append(iid)
             taken.add(iid)
             shown = True
-    st["background"] += [i for i in allowed if i not in taken]
+    # What it was asked about and did not answer is NOT set aside. The first
+    # real run placed 6 of 45 and a rule here sent the other 39 to the
+    # background — a friend's surgery and an overdue card among them. A skip
+    # is counted instead; the item is asked about again, and after two skips
+    # the page decides in the open what happens to it.
+    for i in allowed:
+        if i not in taken:
+            st["asked"][i] = st["asked"].get(i, 0) + 1
     for x in st["subjects"]:
         x["ids"] = x["ids"][-200:]
     st["noise"], st["background"] = st["noise"][-2000:], st["background"][-2000:]
@@ -1001,13 +1025,32 @@ def write_brief(user, key, context, new_ids=(), rekey=None):
         if told:
             system += ("\nTHIS PERSON'S STANDING RULES. They OVERRIDE your own "
                        "judgment:\n" + "\n".join(f"- {f['text']}" for f in told) + "\n")
-        text = ask_claude(system, [{"role": "user", "content": context}],
-                          work="periodic_check", max_tokens=2400).strip()
-        data = json.loads(text[text.index("{"):text.rindex("}") + 1])
+        # In batches. Handed 45 new items at once, the model answered for
+        # six. Fifteen at a time it answers for all of them, and each batch
+        # is shown the subjects the last one opened, so two notices about one
+        # release land together instead of opening two subjects.
+        head, _sep, tail = context.partition("\n\nNEW ITEMS")
+        new_block, sep2, rest = tail.partition("\n\nTODAY'S CALENDAR")
+        new_lines = [ln for ln in new_block.splitlines()[1:] if ln.strip() and ln.strip() != "(none)"]
+        rest = ("\n\nTODAY'S CALENDAR" + rest) if sep2 else ""
+        shown, data, names = False, {}, {}
+        batches = [new_lines[i:i + 15] for i in range(0, len(new_lines), 15)] or [[]]
         lines = lambda v: [str(x).strip()[:120] for x in (v or []) if str(x).strip()][:3]  # noqa: E731
+        for n, batch in enumerate(batches):
+            opened = "\n".join(f"{x['sid']} | {x['title']}" for x in load_subjects(user)["subjects"])
+            body = (head + ("\n\nSUBJECTS OPENED SO FAR (use `into` for these):\n" + opened if n and opened else "")
+                    + "\n\nNEW ITEMS — place every one (`id | source | what | when | detail`):\n"
+                    + ("\n".join(batch) or "(none)") + rest)
+            text = ask_claude(system, [{"role": "user", "content": body}],
+                              work="periodic_check", max_tokens=1800).strip()
+            data = json.loads(text[text.index("{"):text.rindex("}") + 1])
+            ids_here = {ln.split(" | ", 1)[0].strip() for ln in batch} & set(new_ids)
+            with _regen_lock:
+                got_names, got_shown = apply_places(
+                    user, [pl for pl in (data.get("place") or []) if isinstance(pl, dict)], ids_here)
+            names.update(got_names)
+            shown = shown or got_shown
         with _regen_lock:
-            names, shown = apply_places(
-                user, [pl for pl in (data.get("place") or []) if isinstance(pl, dict)], set(new_ids))
             try:
                 old = json.load(open(brief_path(user)))
             except Exception:  # noqa: BLE001
@@ -1759,6 +1802,11 @@ def payload(grant=None, user=""):
     # over, and facts that only inform. They feed the summary as context.
     quiet = lambda x: (x["kind"] == "event" and x["dim"]) or x["kind"] in ("people", "money") or x["id"] == "spend"  # noqa: E731
     fresh = [x for x in things if x["id"] not in homed and x["id"] not in aside and not quiet(x)]
+    # Skipped twice by the model: stop asking. Everything but mail stays on
+    # the page under "New", in the open; mail it would not judge stays off it.
+    stuck = {i for i, n_ in record["asked"].items() if n_ >= 2}
+    unsorted = [x for x in fresh if x["id"] in stuck and x["kind"] != "mail"]
+    fresh = [x for x in fresh if x["id"] not in stuck]
     line = lambda x: (f"{x['id']} | {x['kind']} | {x['what']} | {x['when'] or '-'}"   # noqa: E731
                       + (" | LATE (overdue by this long)" if x["late"] else "")
                       + (" | (finished)" if x["dim"] else "")
@@ -1791,7 +1839,7 @@ def payload(grant=None, user=""):
     held = organised(user, rekey(homed), ctx, now, [x["id"] for x in fresh[:120]], rekey)
     # Mail is never drawn before it has been judged. Everything else that is
     # new can wait on the page under "New"; a promotion cannot be allowed to.
-    fresh = [x for x in fresh if x["kind"] != "mail"]
+    fresh = [x for x in fresh if x["kind"] != "mail"] + unsorted
 
     # ---- subjects: read from the record, in the record's order -------------
     states = (held or {}).get("states") or {}
