@@ -96,6 +96,15 @@ class Gap(Exception):
     """A source did not answer. Carries a sentence a person can read."""
 
 
+class Quiet(Gap):
+    """A source answered, and had nothing to say. NOT a failure.
+
+    "Money didn't answer — no spending is recorded for this month yet" sat
+    in the page's failure footer under a warning triangle. Nothing had
+    failed; there was just nothing to show.
+    """
+
+
 # A Python exception class is not a sentence. These are the ones that reach
 # the footer, which draws one line of 12pt muted text per source.
 PLAIN = {"TimeoutError": "it took too long to answer",
@@ -629,44 +638,27 @@ Each block below is a SEPARATE subject. Never join facts from two blocks
 into one sentence.
 """
 
-BRIEF_SYSTEM = """You write one person's daily briefing inside their own assistant.
+BRIEF_SYSTEM = """You pick the ONE thing on a person's day that most deserves their
+attention, inside their own assistant. You are the single sentence at the top
+of a page that already shows their calendar, their to-dos and what is wrong
+around them — in full, a few inches below you.
 
-You are given everything their hub knows about today. Answer ONLY with JSON:
+Answer ONLY with JSON:
 
-{"headline": "...", "focus": {"what": "...", "why": "..."},
- "mood": "calm|busy|behind"}
+{"what": "...", "why": "..."}
 
-- headline: ONE sentence on the state of the day. Concrete. Name real things.
-  Not "you have a busy day" — "Three meetings before noon, then the afternoon
-  is yours."
-- focus: the single thing worth their attention today, and why it is THAT
-  one rather than another. Prefer something with a deadline, someone waiting,
-  or a consequence. If nothing deserves it, say so in `what` and leave `why`
-  empty.
-- mood: `behind` if things are overdue or someone is waiting, `busy` if the
-  day is full, `calm` otherwise.
-
-EVERY LINE BELOW IS ALREADY DRAWN ON THE PAGE AROUND YOU. The person can see
-their calendar, their overdue tasks, what the house is doing and what the
-models cost — in full, in their own blocks, a few inches from what you write.
-Restating one of them is worse than silence, because it costs them a read and
-tells them nothing. You are two sentences on a page of facts: say what the
-facts MEAN together, or say very little.
-
-`why` earns its place or it does not exist. "This needs attention before it
-becomes a problem", "worth monitoring", "it's your first thing tomorrow" and
-"the hub has a problem that needs visibility" are not reasons — they are the
-shape of a reason with nothing inside it. If you cannot say something the
-person does not already know, leave `why` empty.
+- what: ONE short sentence, twelve words at most, naming the real thing.
+  Prefer someone waiting on them, then a deadline, then a consequence. It is
+  NOT a summary of the day: never say meetings are done, never recite what is
+  on the calendar, never count things. They can see all of that.
+- why: why THAT one rather than another, twenty words at most — and only if
+  it says something the page does not already show. Otherwise "". "Worth
+  monitoring", "needs attention", "it's your first thing tomorrow" are the
+  shape of a reason with nothing inside it: leave it empty instead.
+- If nothing deserves it, what is "Nothing needs you right now." and why "".
 
 Each block below is a SEPARATE subject. Never join facts from two blocks
-into one sentence — a person's location and a failing job on the hub have
-nothing to do with each other, and a briefing that implies they do is worse
-than one that omits both.
-
-Write like a sharp colleague who read everything before you got in. Short
-sentences. No preamble, no "here is", no bullets inside a field. Never invent
-a fact that is not below; if something is unknown, leave it out.
+into one sentence. Never invent a fact that is not below.
 """
 
 
@@ -788,8 +780,8 @@ def write_brief(user, key, context):
         if text.startswith("```"):
             text = text.split("```")[1].lstrip("json").strip()
         data = json.loads(text[text.index("{"):text.rindex("}") + 1])
-        if not isinstance(data.get("headline"), str):
-            raise ValueError("no headline")
+        if not isinstance(data.get("what"), str) or not data["what"].strip():
+            raise ValueError("no `what`")
         data["at"] = datetime.now().isoformat(timespec="minutes")
         with _regen_lock:
             json.dump({"digest": key, "brief": data}, open(brief_path(user), "w"))
@@ -930,6 +922,8 @@ def briefing(user, items, evs, now, extras, context=None):
     except Exception:  # noqa: BLE001
         held = None
 
+    if held and not (held.get("brief") or {}).get("what"):
+        held = None   # written by an older shape of this prompt
     if not held or held.get("digest") != key:
         with _regen_lock:
             if (user, key) not in _regen:
@@ -966,7 +960,7 @@ def money(now, act):
     d = json.loads(out)
     total = float(d.get("total_spending") or 0)
     if total <= 0:
-        raise Gap("no spending is recorded for this month yet")
+        raise Quiet("no spending is recorded for this month yet")
     cats = sorted((d.get("categories") or []), key=lambda c: -float(c.get("total") or 0))
     top = cats[0] if cats else None
     return {"amount": f"${total:,.0f}",
@@ -982,7 +976,7 @@ def spend(now, _act):
     projected = float(d.get("projected_usd") or 0)
     rate = float(d.get("daily_run_rate_usd") or 0)
     if so_far <= 0:
-        raise Gap("nothing is recorded for this period")
+        raise Quiet("nothing is recorded for this period")
     used = max(0.0, min(1.0, so_far / projected)) if projected > 0 else 1.0
     return {"amount": f"${so_far:,.2f}",
             "note": f"${rate:,.2f} a day — on track for ${projected:,.0f} by month end"
@@ -1016,7 +1010,7 @@ def box(now, _act):
     except Gap:
         pass
     if not out:
-        raise Gap("nothing is wrong with the box")
+        raise Quiet("nothing is wrong with the box")
     return [{"id": f"b{i}", **row} for i, row in enumerate(out)]
 
 
@@ -1038,12 +1032,13 @@ def whereis(now, _act):
         if not place:
             continue
         mins = int((now - seen).total_seconds() // 60)
-        out.append({"id": f"w{len(out)}", "icon": "location", "tint": "green",
+        out.append({"id": f"w{len(out)}", "uid": str(r.get("user_id") or ""),
+                    "icon": "location", "tint": "green",
                     "what": f"{name} — {place}",
                     "detail": "just now" if mins < 5 else f"{mins} min ago" if mins < 90
                               else f"{mins // 60}h ago"})
     if not out:
-        raise Gap("nobody has shared a location recently")
+        raise Quiet("nobody has shared a location recently")
     return out[:4]
 
 
@@ -1281,12 +1276,14 @@ def payload(grant=None, user=""):
     sources = {"events": events, "tasks": tasks, "notes": notes,
                "mail": mail, "weather": weather, "house": house,
                "money": money, "spend": spend, "box": box, "whereis": whereis}
-    got, gaps = {}, []
+    got, gaps, quiet = {}, [], 0
     with ThreadPoolExecutor(max_workers=len(sources)) as pool:
         futures = {k: pool.submit(fn, now, act) for k, fn in sources.items()}
         for key, fut in futures.items():
             try:
                 got[key] = fut.result()
+            except Quiet:
+                quiet += 1
             except Gap as g:
                 gaps.append({"id": key, "what": f"{key.title()} didn't answer — {g}."})
             except Exception as e:  # noqa: BLE001
@@ -1304,7 +1301,7 @@ def payload(grant=None, user=""):
                   {"id": "k2", "key": "e", "does": "tick off"},
                   {"id": "k3", "key": "/", "does": "ask"}]}
 
-    if len(gaps) == len(sources):
+    if gaps and len(gaps) + quiet == len(sources):
         d["nothing_worked"] = "1"
         reasons = list(dict.fromkeys(g["what"].split(" didn't answer — ", 1)[-1] for g in gaps))
         d["why"] = ("Nothing answered: " + reasons[0]) if len(reasons) == 1 \
@@ -1313,13 +1310,22 @@ def payload(grant=None, user=""):
 
     if got.get("weather"):
         d["weather"] = got["weather"]
-    around = (got.get("house") or []) + (got.get("whereis") or []) + (got.get("box") or [])
+    # One list. Money and the model bill were two cards of their own, the
+    # second with a progress bar — a third of the right column for two facts.
+    # And nobody needs to be told where THEY are: the viewer's own location
+    # was the first row of this list.
+    others = [w for w in (got.get("whereis") or []) if w.get("uid") != user]
+    around = (got.get("house") or []) + (got.get("box") or []) + others
+    if got.get("money"):
+        m_ = got["money"]
+        around.append({"id": "money", "icon": "creditcard", "tint": "blue",
+                       "what": f"{m_['amount']} spent this month", "detail": m_["note"]})
+    if got.get("spend"):
+        s_ = got["spend"]
+        around.append({"id": "spend", "icon": "cpu", "tint": s_["tint"],
+                       "what": f"{s_['amount']} on models this month", "detail": s_["note"]})
     if around:
         d["house"] = mark_last(around[:8])
-    if got.get("money"):
-        d["money"] = got["money"]
-    if got.get("spend"):
-        d["spend"] = got["spend"]
 
     # The day
     if evs:
@@ -1338,6 +1344,7 @@ def payload(grant=None, user=""):
                     "len": human_len(nxt["mins"]) if not nxt["allday"] else "All day",
                     "join": "", "join_ask": "", "faces": []}
         rail, today = [], [e for e in evs if e["at"].date() == now.date() or e["live_now"]]
+        today.sort(key=lambda e: (not e["allday"], e["at"]))
         for i, e in enumerate(today[:SHOWN]):
             rail.append({"id": e["id"],
                          "time": "all day" if e["allday"] else clock(e["at"]),
@@ -1347,7 +1354,10 @@ def payload(grant=None, user=""):
                          "live": "1" if (not e["allday"]
                                          and e["at"] <= now <= e["at"] + timedelta(minutes=e["mins"])) else "",
                          "last": "1" if i == len(today[:SHOWN]) - 1 else "",
-                         "leave": "", "tight": tight_note(today, i)})
+                         "leave": "",
+                         # "Straight after Engineering…" under a meeting that
+                         # ended eight hours ago is not a warning any more.
+                         "tight": tight_note(today, i) if e["at"] > now else ""})
         if rail:
             d["rail"] = rail
             d["rail_note"] = f"{len(today)} today"
@@ -1373,12 +1383,6 @@ def payload(grant=None, user=""):
         d["threads"] = threads
         d["threads_note"] = (plural(len(threads), "subject") + ", "
                              + plural(sum(len(t["strands"]) for t in threads), "item"))
-    elif items:
-        kinds = len({i["kind"] for i in items})
-        d["no_threads"] = (
-            f"Nothing spans two places today — {plural(len(items), 'item')} across "
-            f"{plural(kinds, 'source')}, none of them about the same thing."
-        )
 
     # Whatever no subject claimed, and only what is due
     rest = [i for i in items if i["id"] not in used and i["kind"] in ("task", "mail")]
@@ -1439,20 +1443,16 @@ def payload(grant=None, user=""):
     if not br and (items or evs):
         d["brief_pending"] = "1"
     if br:
-        mood = str(br.get("mood") or "calm").lower()
-        br["tint"] = {"behind": "red", "busy": "amber"}.get(mood, "green")
-        br["icon"] = {"behind": "exclamationmark.triangle", "busy": "flame"}.get(mood, "sun.max")
-        # No `notes`. Four of them shipped, and every one restated a row
-        # drawn elsewhere on this page — the overdue tasks, the failing
-        # release, the model spend, tomorrow's 08:00 — each under a `why`
-        # like "worth monitoring". The prompt forbade restatement and could
-        # not win: the lists are the only input, so a model asked for
-        # something that is not them has nowhere to go.
-        br.pop("notes", None)
-        focus = br.get("focus") if isinstance(br.get("focus"), dict) else {}
-        br["focus"] = {"what": str(focus.get("what") or "")[:140],
-                       "why": str(focus.get("why") or "")[:240]}
-        d["brief"] = br
+        # The hero is one sentence and, at most, its reason. It was a
+        # headline, a focus and four notes; the headline went last, because
+        # "Today's meetings are done. Tomorrow starts at 08:00…" is the
+        # calendar read aloud, directly above the calendar.
+        what = str(br.get("what") or "").strip()[:140]
+        if what:
+            d["brief"] = {"what": what, "why": str(br.get("why") or "").strip()[:200],
+                          "age": br.get("age", ""), "stale": br.get("stale", "")}
+        else:
+            d["brief_pending"] = "1"   # an old-shape cache; a rewrite is already running
 
     told = fixes(user)
     if told:
@@ -1470,7 +1470,9 @@ def payload(grant=None, user=""):
     if note:
         d["changed"] = note
     if gaps:
-        d["gaps"] = gaps
+        names = [g["id"].title() for g in gaps]
+        d["gaps_line"] = (gaps[0]["what"].replace(" didn't answer — ", ": ", 1) if len(gaps) == 1
+                          else "Not shown: " + ", ".join(names[:-1]) + " and " + names[-1] + ".")
     return d
 
 

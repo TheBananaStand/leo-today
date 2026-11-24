@@ -1,6 +1,6 @@
 {
  "loaded": "1",
- "greeting": "Monday afternoon",
+ "greeting": "Monday evening",
  "date_line": "23 November · week 48",
  "keys": [
   {
@@ -36,14 +36,6 @@
    "last": ""
   },
   {
-   "id": "w0",
-   "icon": "location",
-   "tint": "green",
-   "what": "Scott — 3 Maple St",
-   "detail": "2h ago",
-   "last": ""
-  },
-  {
    "id": "b0",
    "icon": "clock.badge.exclamationmark",
    "tint": "amber",
@@ -57,25 +49,34 @@
    "tint": "teal",
    "what": "1 build landed, unannounced",
    "detail": "1.4.0",
+   "last": ""
+  },
+  {
+   "id": "w0",
+   "uid": "u1",
+   "icon": "location",
+   "tint": "green",
+   "what": "Scott — 3 Maple St",
+   "detail": "4h ago",
+   "last": ""
+  },
+  {
+   "id": "money",
+   "icon": "creditcard",
+   "tint": "blue",
+   "what": "$2,341 spent this month",
+   "detail": "Travel is the largest at $980",
+   "last": ""
+  },
+  {
+   "id": "spend",
+   "icon": "cpu",
+   "tint": "amber",
+   "what": "$137.42 on models this month",
+   "detail": "$5.97 a day — on track for $179 by month end",
    "last": "1"
   }
  ],
- "money": {
-  "amount": "$2,341",
-  "note": "Travel is the largest at $980",
-  "tint": "blue",
-  "used": "0",
-  "rest": "1"
- },
- "spend": {
-  "amount": "$137.42",
-  "note": "$5.97 a day — on track for $179 by month end",
-  "tint": "amber",
-  "scale": "this month so far",
-  "cap": "of $179 projected",
-  "used": "76",
-  "rest": "24"
- },
  "strip": [
   {
    "id": "f0",
@@ -114,9 +115,9 @@
   }
  ],
  "at": {
-  "before": "596",
-  "after": "124",
-  "label": "16:56"
+  "before": "720",
+  "after": "0",
+  "label": "19:03"
  },
  "strip_from": "07:00",
  "strip_to": "19:00",
@@ -234,23 +235,10 @@
  ],
  "loose_note": "1 item",
  "brief": {
-  "headline": "Three meetings done, afternoon clear.",
-  "focus": {
-   "what": "Answer Maya",
-   "why": "She has asked twice and you fly tomorrow."
-  },
-  "notes": [
-   {
-    "id": "bn0",
-    "what": "Flight at 08:00",
-    "why": "Earlier than your usual start."
-   }
-  ],
-  "mood": "busy",
+  "what": "Answer Maya about the Austin dates.",
+  "why": "She has asked twice and you fly tomorrow.",
   "age": "just now",
-  "stale": "1",
-  "tint": "amber",
-  "icon": "flame"
+  "stale": "1"
  },
  "suggestions": [
   {

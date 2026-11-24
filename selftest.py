@@ -70,10 +70,7 @@ m.tool = lambda name, args, tok: (
                 "categories": [{"category_name": "Travel", "total": 980.0}]}) if name == "finance" else
     "Cloudy. 5° now, 2° / 7° today.")
 m.ask_claude = lambda *a, **k: json.dumps(
-    {"headline": "Three meetings done, afternoon clear.",
-     "focus": {"what": "Answer Maya", "why": "She has asked twice and you fly tomorrow."},
-     "notes": [{"what": "Flight at 08:00", "why": "Earlier than your usual start."}],
-     "mood": "busy"})
+    {"what": "Answer Maya about the Austin dates.", "why": "She has asked twice and you fly tomorrow."})
 m.nudge = lambda: None
 
 d = m.payload("grant", "selftest")
@@ -92,13 +89,14 @@ print("threads      :", [(t["title"], t["clock"], len(t["strands"])) for t in d.
 print("loose        :", [(x["what"][:26], x["when"]) for x in d["loose"]])
 print("house        :", [h["what"] for h in d.get("house", [])])
 print("weather      :", d.get("weather", {}).get("temp"), d.get("weather", {}).get("range"))
-print("brief        :", (d.get("brief") or {}).get("headline", "(none)")[:60],
-      "| focus:", ((d.get("brief") or {}).get("focus") or {}).get("what", "")[:30])
+print("brief        :", (d.get("brief") or {}).get("what", "(none)"), "|", (d.get("brief") or {}).get("why", ""))
 print("money        :", (d.get("money") or {}).get("amount"), "|", (d.get("money") or {}).get("note", "")[:40])
 print("leo cost     :", (d.get("spend") or {}).get("amount"), "|", (d.get("spend") or {}).get("note", "")[:46])
 print("around you   :", [h["what"] for h in d.get("house", [])])
-print("gaps         :", [g["id"] for g in d.get("gaps", [])] or "none")
-assert not d.get("gaps"), "every stubbed source should have answered"
+print("gaps         :", d.get("gaps_line") or "none")
+assert not d.get("gaps_line"), "every stubbed source should have answered"
+assert not any(h.get("uid") == "selftest" for h in d.get("house", [])), "the viewer's own location is on their page"
+assert {"money", "spend"} <= {h["id"] for h in d["house"]}, "money and the model bill belong in the one list"
 
 # --- the action channel ----------------------------------------------------
 # `ui_action` is what a press reaches. It was added with no test and the first
@@ -166,11 +164,11 @@ assert len(told) == 2, f"a correction was stored twice in different case: {told}
 
 seen = {}
 m.ask_claude = lambda system, turns, **k: seen.setdefault("system", system) and "" or json.dumps(
-    {"headline": "h", "focus": {"what": "f", "why": ""}, "mood": "calm"})
+    {"what": "f", "why": ""})
 m.write_brief("selftest", "k", "CONTEXT")
 assert "CORRECTED YOU" in seen["system"], "corrections never reached the writer"
 assert "all-day thing" in seen["system"], seen["system"][-400:]
-assert seen["system"].index("CORRECTED YOU") > seen["system"].index("mood"), \
+assert seen["system"].index("CORRECTED YOU") > seen["system"].index("SEPARATE subject"), \
     "corrections must come LAST, nearest the request"
 print("corrections  :", len(told), "standing, and they reach the writer")
 
@@ -180,7 +178,7 @@ print("corrections  :", len(told), "standing, and they reach the writer")
 # blanks the hero and leaves it blank.
 rang = []
 m.nudge = lambda: rang.append(1)
-m.ask_claude = lambda *a, **k: json.dumps({"headline": "h", "focus": {"what": "f", "why": ""}, "mood": "calm"})
+m.ask_claude = lambda *a, **k: json.dumps({"what": "f", "why": ""})
 m.write_brief("selftest", "k3", "CONTEXT")
 assert rang, "write_brief never nudged the open page"
 rang.clear()
@@ -196,12 +194,12 @@ print("uncorrect    : one removed, one left")
 # A briefing must not carry notes any more — four shipped and every one
 # restated a row drawn elsewhere on the page.
 m.ask_claude = lambda *a, **k: json.dumps(
-    {"headline": "h", "focus": {"what": "f", "why": ""},
-     "notes": [{"what": "n", "why": "w"}], "mood": "calm"})
+    {"what": "f", "why": "", "headline": "h",
+     "notes": [{"what": "n", "why": "w"}]})
 m.write_brief("selftest", "k2", "CONTEXT")
 d2 = m.payload("grant", "selftest")
-assert "notes" not in (d2.get("brief") or {}), "notes came back"
-print("brief        : headline + focus, no notes")
+assert set(d2["brief"]) == {"what", "why", "age", "stale"}, d2["brief"]
+print("brief        : one sentence and its reason, nothing else")
 
 assert m.ui_action("clear", {}, "selftest")["ok"]
 assert m.answer_for("selftest", now) == (None, ""), "clear left something behind"

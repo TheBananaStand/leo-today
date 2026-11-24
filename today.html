@@ -82,7 +82,7 @@
                  aria-label="Tick off {x.what}">
         </span>
         <a id="pick-{x.id}" select="loose_sel={x.id}" selected="loose_sel={x.id}"
-           class="flex items-center gap-3 flex-1 min-w-0 min-h-11 px-1 rounded-lg selected:bg-accent-wash">
+           class="flex items-center gap-3 flex-1 min-w-0 min-h-11 px-1 rounded-lg selected:bg-elevated">
           <span if="!x.done" class="flex-1 min-w-0 text-sm truncate">{x.what}</span>
           <span if="x.done" class="flex-1 min-w-0 text-sm text-muted line-through truncate">{x.what}</span>
           <span if="x.late" class="shrink-0 px-2 py-0.5 rounded-full text-xs font-medium bg-danger text-danger tabular-nums">{x.when}</span>
@@ -116,13 +116,11 @@
       </div>
       <div class="flex flex-col gap-1 min-w-0 flex-1 pb-4">
         <span if="m.free" class="text-xs text-muted italic">{m.what}</span>
-        <a if="!m.free" id="ev-{m.id}" action="ask"
-           args="text='What is this about — {m.title}'"
-           class="flex items-center gap-2 min-w-0 -mx-1 px-1 rounded">
+        <div if="!m.free" class="flex items-center gap-2 min-w-0">
           <span if="!m.done" class="flex-1 min-w-0 text-sm truncate">{m.title}</span>
           <span if="m.done" class="flex-1 min-w-0 text-sm text-muted truncate">{m.title}</span>
           <span if="m.live" class="shrink-0 px-2 py-0.5 rounded-full text-xs font-medium bg-accent-wash text-accent">Now</span>
-        </a>
+        </div>
         <div if="m.leave" class="flex items-center gap-1.5">
           <img icon="figure.walk" alt="" tint="amber" class="size-3 shrink-0 text-tint">
           <span tint="amber" class="text-xs text-tint tabular-nums">{m.leave}</span>
@@ -132,6 +130,9 @@
           <span tint="amber" class="text-xs text-tint line-clamp-2">{m.tight}</span>
         </div>
       </div>
+      <menu>
+        <a id="ev-ask-{m.id}" action="ask" args="text='What is this about — {m.title}'">Ask about this</a>
+      </menu>
     </li>
   </template>
 
@@ -150,39 +151,25 @@
     </li>
   </template>
 
-  <div class="flex flex-col gap-5 w-full max-w-7xl mx-auto px-6 py-6 lg:px-8">
+  <div class="flex flex-col gap-6 w-full max-w-5xl mx-auto px-6 py-6">
 
-    <!-- ===================== THE MASTHEAD =====================
-         One card, not five. Over a wallpaper every separate translucent
-         slab costs contrast at its own edge and the page reads as murky
-         and unanchored; the same content on ONE surface, divided by
-         hairlines, reads as composed.
-
-         Every divider is `-mx-5 px-5 border-t`: the negative margin pulls
-         the rule out to the card's own edge and the padding puts the
-         content back, so a hairline reads as a division of the card rather
-         than as a line floating inside it. Each of the three regions after
-         the header carries one — there is no first-divider special case,
-         because the header is not one of them. -->
-    <section id="masthead" class="flex flex-col gap-4 p-5 rounded-xl bg-surface">
+    <!-- ===================== THE TOP =====================
+         What this page is for, in the order it is for it: the one thing,
+         then the next thing. Everything that used to sit between them —
+         a headline that read the calendar aloud, a strip that drew the
+         calendar a second time, a clock set in the largest type on the
+         page — said what the lists below already say. -->
+    <section id="masthead" class="flex flex-col gap-5 p-5 rounded-xl bg-surface">
       <header id="bar" class="flex items-center gap-3">
         <div class="flex flex-col gap-0.5 min-w-0 flex-1">
           <span class="text-2xl font-bold truncate">{greeting}</span>
           <span class="text-sm text-muted truncate">{date_line}</span>
         </div>
-        <!-- What changed while you were away. A Today page you check six times
-             a day needs to say what is NEW, or you re-read it six times — and
-             a phone is where you check it six times, so this is not the thing
-             to drop at the narrow end. It is a press, so it is the accent:
-             green is Leo's only interactive colour. -->
         <a if="changed" id="changed" action="show_changed"
            class="flex shrink-0 items-center gap-2 px-3 h-9 rounded-full bg-accent-wash">
           <span class="size-1.5 rounded-full bg-accent"></span>
           <span class="text-xs font-medium text-accent truncate">{changed}</span>
         </a>
-        <!-- `bg-surface` here was invisible: the chip sat on a card of the
-             same token. One step up, and the same height and radius as the
-             pill beside it. -->
         <div if="weather" class="flex items-center gap-2 shrink-0 px-3 h-9 rounded-full bg-elevated">
           <img icon="{weather.symbol}" alt="{weather.condition}" tint="{weather.tint}" class="size-4 text-tint">
           <span class="text-sm font-semibold tabular-nums">{weather.temp}</span>
@@ -190,65 +177,29 @@
         </div>
       </header>
 
-      <!-- ===================== THE BRIEFING =====================
-           The reason the page is open. Written by a model, but never while
-           you wait: it is cached against a digest of what it is about, served
-           stale the moment that changes, and rewritten behind the page. The
-           age is always shown, because a briefing whose age you cannot see is
-           one you cannot trust. -->
-      <section if="brief" id="brief" tint="{brief.tint}" class="flex flex-col gap-4 -mx-5 px-5 pt-4 border-t">
-        <div class="flex items-start gap-4">
-          <span class="size-8 md:size-10 shrink-0 flex items-center justify-center rounded-lg bg-tint-wash">
-            <img icon="{brief.icon}" alt="" class="size-4 md:size-5 text-tint">
-          </span>
-          <span class="flex-1 min-w-0 text-lg md:text-xl font-semibold">{brief.headline}</span>
-          <span if="brief.stale" class="shrink-0 flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-elevated">
-            <span class="size-1.5 rounded-full bg-tint animate-pulse"></span>
-            <span class="text-xs text-secondary">rewriting</span>
-          </span>
-        </div>
-
-        <!-- Where the time goes. One thing, and why that one. The glyph is
-             NOT `text-tint`: the tint here is the day's mood, and a focus
-             marker that turns red on a bad day reads as an error about the
-             thing you are being told to do. -->
-        <div if="brief.focus.what" id="brief-focus" class="flex items-start gap-3 p-4 rounded-lg bg-elevated">
-          <img icon="target" alt="" class="size-4 mt-0.5 shrink-0 text-secondary">
-          <div class="flex flex-col gap-1 min-w-0 flex-1">
-            <span class="text-sm font-semibold">{brief.focus.what}</span>
-            <span if="brief.focus.why" class="text-xs text-secondary line-clamp-3">{brief.focus.why}</span>
-          </div>
-        </div>
-
-        <!-- `notes` used to be here: four bullets, two lines each. Every one
-             restated a row drawn elsewhere on THIS page — the overdue tasks,
-             the failing release, the model spend, tomorrow's 08:00 — under a
-             `why` like "worth monitoring". Eight lines of hero that cost a
-             read and said nothing. The prompt had forbidden restatement for
-             months and could not win, because the lists are the only input.
-
-             What is left is a headline, one focus, and a way to say it is
-             wrong. -->
-
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <a if="brief.age" id="rewrite" action="rewrite" aria-label="Read the day again"
-             class="flex items-center gap-1.5 min-h-8 px-2 -ml-2 rounded-full text-xs text-muted tabular-nums">
+      <!-- The one thing. A sentence and, at most, its reason — and under it
+           the way to say it is wrong, because a line written by a model that
+           cannot be corrected is a line you learn to skip. -->
+      <section if="brief" id="brief" class="flex flex-col gap-1.5 -mx-5 px-5 pt-5 border-t">
+        <span class="text-xl font-semibold">{brief.what}</span>
+        <span if="brief.why" class="max-w-prose text-sm text-secondary">{brief.why}</span>
+        <div class="flex flex-wrap items-center gap-x-1 gap-y-1 pt-2">
+          <a if="!$.fixing" id="wrong" select="fixing=1" shortcut="w"
+             class="flex items-center min-h-8 px-3 -ml-3 rounded-full text-xs font-medium text-secondary">Not right?</a>
+          <a if="$.fixing" id="wrong-close" select="fixing=" shortcut="esc"
+             class="flex items-center min-h-8 px-3 -ml-3 rounded-full text-xs font-medium text-secondary">Close</a>
+          <a if="brief.age" id="rewrite" action="rewrite" aria-label="Write it again"
+             class="flex items-center gap-1.5 min-h-8 px-2 rounded-full text-xs text-muted tabular-nums">
             <img icon="arrow.clockwise" alt="" class="size-3">
             <span>{brief.age}</span>
           </a>
-          <a if="!$.fixing" id="wrong" select="fixing=1" shortcut="w"
-             class="flex items-center min-h-8 px-3 rounded-full bg-elevated text-xs font-medium text-secondary">That's not right</a>
-          <a if="$.fixing" id="wrong-close" select="fixing=" shortcut="esc"
-             class="flex items-center min-h-8 px-3 rounded-full bg-elevated text-xs font-medium text-secondary">Done</a>
+          <span if="brief.stale" class="text-xs text-muted animate-pulse">rewriting…</span>
           <span if="corrections_note" class="ml-auto shrink-0 text-xs text-muted">{corrections_note}</span>
         </div>
 
-        <!-- Telling it it is wrong. A correction is about the WRITER, not
-             about the briefing in front of you: it is held, it is handed to
-             every rewrite from here on, and it is listed with a way out —
-             because a standing instruction you cannot see or withdraw is
-             worse than one that was never heard. -->
-        <div if="$.fixing" id="fixing" class="flex flex-col gap-3 p-4 rounded-lg bg-elevated">
+        <!-- A correction is about the WRITER, not about this sentence: it is
+             handed to every rewrite from here on, and listed with a way out. -->
+        <div if="$.fixing" id="fixing" class="flex flex-col gap-2 mt-1 p-3 rounded-lg bg-elevated">
           <form id="fix" action="correct" args="text={$.form.fix}" class="flex items-center gap-2">
             <input id="fix-field" bind="form.fix" required autofocus
                    placeholder="What did it get wrong?"
@@ -257,9 +208,9 @@
                     disabled="!$.form.fix"
                     class="shrink-0 h-10 px-4 rounded-lg bg-accent text-on-accent">Save</button>
           </form>
-          <span if="!corrections" class="text-xs text-muted">It holds this the next time it writes the day, and every time after.</span>
+          <span if="!corrections" class="px-1 text-xs text-muted">It keeps this in mind every time it writes, from now on.</span>
           <div if="corrections" class="flex flex-col">
-            <div each="c in corrections" id="c-{c.id}" class="flex items-center gap-1 min-h-9">
+            <div each="c in corrections" id="c-{c.id}" class="flex items-center gap-1 min-h-9 px-1">
               <span class="min-w-0 max-w-2xl text-sm text-secondary line-clamp-2">{c.text}</span>
               <a id="unfix-{c.id}" action="uncorrect" args="id={c.id}" aria-label="Forget this correction"
                  class="shrink-0 size-9 flex items-center justify-center rounded-full">
@@ -270,85 +221,22 @@
         </div>
       </section>
 
-      <!-- The first briefing is still being written. Say so rather than
-           showing a hole where the page's whole point goes. Same divider as
-           the real thing, so the card does not change shape when it lands. -->
-      <section if="brief_pending" id="brief-pending" class="flex items-center gap-4 -mx-5 px-5 pt-4 border-t">
-        <span class="size-10 shrink-0 rounded-lg bg-elevated animate-pulse"></span>
-        <div class="flex flex-col gap-1.5 min-w-0 flex-1">
-          <span class="h-3 w-64 rounded bg-elevated animate-pulse"></span>
-          <span class="text-xs text-muted">Reading your day…</span>
-        </div>
+      <section if="brief_pending" id="brief-pending" class="flex flex-col gap-2 -mx-5 px-5 pt-5 border-t">
+        <span class="h-5 w-80 rounded bg-elevated animate-pulse"></span>
+        <span class="text-xs text-muted">Reading your day…</span>
       </section>
 
-      <!-- ===================== THE DAY, AS ONE OBJECT =====================
-           Not a list of rows that happen to be in order: a strip where each
-           block is as wide as it is long, so a 2h review looks like a 2h
-           review and the hole at noon is a hole. Both the blocks and the
-           playhead come from `grow`, so the shape is the payload's and
-           nothing here computes.
-
-           The playhead and the axis sit in boxes with the SAME `px-1` as the
-           track's own `p-1`. Without it they are measured against the outer
-           width and every reading is offset by 4pt at each end — small, and
-           always in the direction that makes the marker disagree with the
-           block it is pointing at. -->
-      <section if="strip" id="strip" class="flex flex-col -mx-5 px-5 pt-4 border-t">
-        <div class="flex items-stretch gap-1 h-9 p-1 rounded-lg bg-elevated">
-          <div each="b in strip" id="b-{b.id}" grow="{b.span}" tint="{b.tint}" class="flex min-w-0">
-            <div if="!b.free" class="flex flex-1 items-center px-2 rounded overflow-hidden bg-tint-wash">
-              <span class="hidden md:flex text-xs font-medium text-tint truncate">{b.label}</span>
-            </div>
-            <div if="b.free" class="flex flex-1 items-center justify-center px-1 overflow-hidden">
-              <span class="text-xs text-muted truncate">{b.label}</span>
-            </div>
-          </div>
-        </div>
-        <div class="flex items-start px-1">
-          <div grow="{at.before}"></div>
-          <div class="flex flex-col items-center shrink-0">
-            <span class="w-0.5 h-2 bg-accent"></span>
-            <span class="text-xs font-semibold text-accent tabular-nums">{at.label}</span>
-          </div>
-          <div grow="{at.after}"></div>
-        </div>
-        <div class="flex items-center px-1 pt-1">
-          <span class="flex-1 min-w-0 text-xs text-muted tabular-nums">{strip_from}</span>
-          <span class="flex-1 min-w-0 text-xs text-secondary text-center truncate">{strip_note}</span>
-          <span class="flex-1 min-w-0 text-xs text-muted text-right tabular-nums">{strip_to}</span>
-        </div>
-      </section>
-
-      <!-- The next thing. `text-3xl` is the top of Leo's scale; the old
-           `text-4xl` was off it, and it made a clock the largest thing on a
-           page whose largest thing should be what the day is about. -->
-      <header if="now" id="now" class="flex items-center gap-5 -mx-5 px-5 pt-4 border-t">
-        <div class="flex flex-col gap-0.5 shrink-0">
-          <span class="text-xs font-semibold text-secondary uppercase">{now.lead}</span>
-          <span class="text-3xl font-bold tabular-nums">{now.time}</span>
-        </div>
-        <div class="flex flex-col gap-0.5 min-w-0 flex-1">
-          <span class="text-base font-medium line-clamp-1">{now.title}</span>
-          <span if="now.where" class="text-xs text-muted truncate">{now.where}</span>
-        </div>
-        <span if="now.len" class="hidden md:flex shrink-0 px-2.5 py-1 rounded-full text-xs font-medium bg-elevated text-secondary tabular-nums">{now.len}</span>
-        <div if="now.faces" class="hidden md:flex items-center gap-1.5 shrink-0">
-          <span each="f in now.faces" id="nf-{f.id}" tint="{f.tint}"
-                class="size-8 flex items-center justify-center rounded-full bg-tint-wash">
-            <span class="text-xs font-semibold text-tint">{f.initials}</span>
-          </span>
-        </div>
-        <a if="now.join" id="join" action="ask" args="text={now.join_ask}"
-           class="shrink-0 h-10 px-5 flex items-center rounded-lg text-sm font-semibold bg-accent text-on-accent">{now.join}</a>
-      </header>
+      <!-- The next thing: one line. The label is its lead — "In 25 minutes",
+           "Tomorrow" — so there is no word on this row that is not data. -->
+      <div if="now" id="now" class="flex items-center gap-3 -mx-5 px-5 pt-4 border-t">
+        <span class="shrink-0 text-xs font-semibold text-secondary uppercase">{now.lead}</span>
+        <span class="shrink-0 text-sm font-semibold tabular-nums">{now.time}</span>
+        <span class="flex-1 min-w-0 text-sm truncate">{now.title}</span>
+        <span if="now.where" class="hidden md:flex shrink-0 max-w-xs text-xs text-muted truncate">{now.where}</span>
+        <span if="now.len" class="shrink-0 text-xs text-muted tabular-nums">{now.len}</span>
+      </div>
     </section>
 
-    <!-- NOTHING answered. A partial failure is the quiet footer at the foot
-         of this page; this is the other case, and it gets a real state with
-         a way out rather than a blank page. The two whole-page states are
-         one shape — same card, same inset, same icon size — because two
-         empty states in two visual languages is how a page stops reading as
-         one page. -->
     <div if="nothing_worked" id="unreachable" class="flex flex-col items-center gap-3 py-14 rounded-xl bg-surface">
       <img icon="wifi.exclamationmark" alt="" tint="amber" class="size-10 text-tint">
       <span class="text-lg font-semibold">Couldn't put today together</span>
@@ -363,177 +251,96 @@
       <span class="max-w-prose px-6 text-sm text-muted text-center">No events, nothing due and nothing new since you last looked.</span>
     </div>
 
-    <!-- The left column is the work and the right is the day around it. The
-         house facts moved right: with them on the left the page ran ~600pt
-         longer on one side than the other at every window width that shows
-         two columns, which is a third of the page empty under the fold. -->
-    <div class="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
+    <div class="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
 
-      <!-- ---------- LEFT: the work, by subject ---------- -->
-      <div class="flex flex-col gap-5 min-w-0">
+      <!-- ---------- LEFT: what is yours to do ---------- -->
+      <div class="flex flex-col gap-6 min-w-0">
 
         <section if="threads" id="threads" class="flex flex-col gap-3">
-          <div class="flex items-end justify-between gap-4">
-            <h2 class="text-xs font-semibold text-secondary uppercase">What's live</h2>
-            <span class="shrink-0 text-xs text-muted">{threads_note}</span>
-          </div>
+          <h2 class="text-xs font-semibold text-secondary uppercase">In motion</h2>
           <use template="thread" each="t in threads"></use>
         </section>
 
         <section if="loose" id="loose" class="flex flex-col gap-3">
-          <div class="flex items-end justify-between gap-4">
-            <h2 class="text-xs font-semibold text-secondary uppercase">Loose ends</h2>
-            <span class="shrink-0 text-xs text-muted tabular-nums">{loose_note}</span>
-          </div>
+          <h2 class="text-xs font-semibold text-secondary uppercase">To do</h2>
           <ul keys="loose_sel" class="flex flex-col rounded-xl bg-surface overflow-hidden">
             <use template="loose" each="x in loose"></use>
             <use template="loose" each="x in loose_rest" if="$.loose_open"></use>
           </ul>
-          <!-- The count used to be the end of the list. It is the lid now. -->
           <div if="loose_more" class="flex">
             <a if="!$.loose_open" id="loose-open" select="loose_open=1" shortcut="m"
-               class="min-h-10 px-3 flex items-center rounded-lg text-sm font-medium text-secondary">{loose_more}</a>
+               class="min-h-9 px-3 flex items-center rounded-lg text-xs font-medium text-secondary">{loose_more}</a>
             <a if="$.loose_open" id="loose-close" select="loose_open=" shortcut="m"
-               class="min-h-10 px-3 flex items-center rounded-lg text-sm font-medium text-secondary">Show less</a>
+               class="min-h-9 px-3 flex items-center rounded-lg text-xs font-medium text-secondary">Show less</a>
           </div>
-          <!-- Why nothing clustered into a thread. It used to live inside the
-               header of this section, which is gated on there BEING loose
-               ends — so the sentence explaining an empty page was unreachable
-               on an empty page. It is its own block now. -->
-          <span if="no_threads" class="text-xs text-muted line-clamp-2">{no_threads}</span>
         </section>
 
       </div>
 
-      <!-- ---------- RIGHT: time, and the world ---------- -->
-      <div class="flex flex-col gap-5 min-w-0">
+      <!-- ---------- RIGHT: the day, and what is worth knowing ---------- -->
+      <div class="flex flex-col gap-6 min-w-0">
         <section if="rail" id="day" class="flex flex-col gap-3">
-          <div class="flex items-end justify-between gap-4">
-            <h2 class="text-xs font-semibold text-secondary uppercase">The day</h2>
-            <span class="shrink-0 text-xs text-muted tabular-nums">{rail_note}</span>
-          </div>
+          <h2 class="text-xs font-semibold text-secondary uppercase">Today</h2>
           <ul class="flex flex-col p-4 pb-0 rounded-xl bg-surface">
             <use template="moment" each="m in rail"></use>
           </ul>
         </section>
 
         <section if="house" id="house" class="flex flex-col gap-3">
-          <h2 class="text-xs font-semibold text-secondary uppercase">Around you</h2>
+          <h2 class="text-xs font-semibold text-secondary uppercase">Worth knowing</h2>
           <ul class="flex flex-col rounded-xl bg-surface overflow-hidden">
             <use template="fact" each="x in house"></use>
           </ul>
         </section>
-
-        <!-- Two different monies, so two blocks: what the household spent,
-             and what this hub's own models cost. One number labelled
-             "spending" covering both would be a lie in whichever direction
-             you read it.
-
-             Both are the same card now — same type size, same padding, same
-             rhythm, and the note UNDER the number rather than squeezed in
-             beside it. Right-aligning a two-line note against a baseline put
-             its first line in mid-air and orphaned the last word of it. -->
-        <section if="money" id="money" class="flex flex-col gap-3">
-          <h2 class="text-xs font-semibold text-secondary uppercase">Spending</h2>
-          <div class="flex flex-col gap-1 p-4 rounded-xl bg-surface">
-            <span class="text-2xl font-bold tabular-nums">{money.amount}</span>
-            <span class="text-xs text-muted line-clamp-2">{money.note}</span>
-          </div>
-        </section>
-
-        <section if="spend" id="spend" class="flex flex-col gap-3">
-          <h2 class="text-xs font-semibold text-secondary uppercase">Leo's own cost</h2>
-          <div class="flex flex-col gap-3 p-4 rounded-xl bg-surface">
-            <div class="flex flex-col gap-1">
-              <span class="text-2xl font-bold tabular-nums">{spend.amount}</span>
-              <span class="text-xs text-muted line-clamp-2">{spend.note}</span>
-            </div>
-            <div class="flex flex-col gap-1">
-              <div tint="{spend.tint}" class="flex items-center h-1.5 rounded-full bg-elevated overflow-hidden">
-                <div grow="{spend.used}" class="h-1.5 bg-tint"></div>
-                <div grow="{spend.rest}" class="h-1.5"></div>
-              </div>
-              <!-- A bar with no scale is a shape, not a figure. -->
-              <div if="spend.cap" class="flex items-center justify-between gap-3">
-                <span class="text-xs text-muted">{spend.scale}</span>
-                <span class="text-xs text-muted tabular-nums">{spend.cap}</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
       </div>
     </div>
 
-    <section if="!nothing_worked" id="ask" class="flex flex-col gap-3">
-      <h2 class="text-xs font-semibold text-secondary uppercase">Ask</h2>
-      <div class="flex flex-col p-4 rounded-xl bg-surface">
+    <!-- Ask. No heading: a field that says "Ask about today" is its own. -->
+    <section if="!nothing_worked" id="ask" class="flex flex-col gap-3 p-4 rounded-xl bg-surface">
+      <div if="asking" id="asking" class="flex items-center gap-3 min-h-9">
+        <span class="size-1.5 shrink-0 rounded-full bg-accent animate-pulse"></span>
+        <span class="min-w-0 max-w-prose text-sm text-secondary truncate">{asking}</span>
+        <span class="shrink-0 text-xs text-muted">thinking…</span>
+      </div>
 
-        <!-- The answer, when there is one. A press files the question and the
-             model call runs off the request path, so this card has three
-             states and the page never waits on one of them: a question in
-             flight, an answer, and an answer that could not be written.
-
-             `nudge()` is what brings the page back when the answer lands —
-             the same channel the briefing already uses, so there is one way
-             this page gets late news rather than two. -->
-        <div if="asking" id="asking" class="flex items-center gap-3 min-h-11 pb-4 border-b">
-          <span class="size-1.5 shrink-0 rounded-full bg-accent animate-pulse"></span>
-          <span class="min-w-0 max-w-prose text-sm text-secondary truncate">{asking}</span>
-          <span class="shrink-0 text-xs text-muted">thinking…</span>
+      <div if="answer" id="answer" class="flex flex-col gap-2 pb-1">
+        <div class="flex items-start gap-3">
+          <span class="flex-1 min-w-0 text-sm font-semibold line-clamp-2">{answer.question}</span>
+          <span class="shrink-0 text-xs text-muted tabular-nums">{answer.age}</span>
+          <a id="clear-answer" action="clear" aria-label="Clear this answer"
+             class="shrink-0 size-9 -mr-2 -my-2 flex items-center justify-center rounded-full">
+            <img icon="xmark" alt="" class="size-3.5 text-muted">
+          </a>
         </div>
-
-        <div if="answer" id="answer" class="flex flex-col gap-2 pb-4 border-b">
-          <div class="flex items-start gap-3">
-            <span class="flex-1 min-w-0 text-sm font-semibold line-clamp-2">{answer.question}</span>
-            <span class="shrink-0 text-xs text-muted tabular-nums">{answer.age}</span>
-            <a id="clear-answer" action="clear" aria-label="Clear this answer"
-               class="shrink-0 size-9 -mr-2 -my-1 flex items-center justify-center rounded-full">
-              <img icon="xmark" alt="" class="size-3.5 text-muted">
-            </a>
-          </div>
-          <markdown if="answer.text" class="max-w-prose text-sm select-text">{answer.text}</markdown>
-          <div if="answer.failed" class="flex flex-wrap items-center gap-3">
-            <div class="flex items-center gap-2 min-w-0">
-              <img icon="exclamationmark.triangle" alt="" tint="amber" class="size-3.5 shrink-0 text-tint">
-              <span class="min-w-0 text-xs text-muted truncate">Couldn't answer — {answer.failed}</span>
-            </div>
-            <a id="ask-again" action="ask" args="text={answer.question}"
-               class="shrink-0 min-h-9 px-3 flex items-center rounded-lg text-sm font-medium bg-elevated">Try again</a>
-          </div>
+        <markdown if="answer.text" class="max-w-prose text-sm select-text">{answer.text}</markdown>
+        <div if="answer.failed" class="flex flex-wrap items-center gap-3">
+          <span class="min-w-0 text-xs text-muted truncate">Couldn't answer — {answer.failed}</span>
+          <a id="ask-again" action="ask" args="text={answer.question}"
+             class="shrink-0 min-h-9 px-3 flex items-center rounded-lg text-xs font-medium bg-elevated">Try again</a>
         </div>
+      </div>
 
-        <div if="suggestions" class="flex flex-wrap items-center gap-2 pb-4 border-b">
-          <a each="s in suggestions" id="sg-{s.id}" action="ask" args="text={s.text}"
-             class="min-h-10 px-3.5 flex items-center shrink-0 rounded-full text-sm font-medium bg-elevated">{s.text}</a>
-        </div>
-        <form id="compose" action="ask" args="text={$.form.message}" class="flex items-center gap-2 pt-4">
-          <input id="ask-field" bind="form.message" placeholder="Ask about today" shortcut="/" required
-                 class="flex-1 max-w-2xl h-10 min-w-0">
-          <button id="ask-send" action="ask" args="text={$.form.message}"
-                  disabled="!$.form.message"
-                  class="shrink-0 h-10 px-5 rounded-lg bg-accent text-on-accent">Ask</button>
-        </form>
+      <form id="compose" action="ask" args="text={$.form.message}" class="flex items-center gap-2">
+        <input id="ask-field" bind="form.message" placeholder="Ask about today" shortcut="/" required
+               class="flex-1 h-10 min-w-0">
+        <button id="ask-send" action="ask" args="text={$.form.message}"
+                disabled="!$.form.message"
+                class="shrink-0 h-10 px-5 rounded-lg bg-accent text-on-accent">Ask</button>
+      </form>
+      <div if="suggestions" class="flex flex-wrap items-center gap-2">
+        <a each="s in suggestions" id="sg-{s.id}" action="ask" args="text={s.text}"
+           class="min-h-8 px-3 flex items-center shrink-0 rounded-full text-xs font-medium text-secondary bg-elevated">{s.text}</a>
       </div>
     </section>
 
-    <!-- What did not answer. A heading, because six unlabelled amber lines
-         at the foot of a page read as six things being wrong with the page
-         rather than as a note about its sources — and one line each, because
-         the producer can put a hub error body in here and `line-clamp-2` let
-         a JSON blob take two full-width lines. -->
-    <footer if="gaps" id="gaps" class="flex flex-col gap-2 pt-1">
-      <h2 class="text-xs font-semibold text-secondary uppercase">Didn't answer</h2>
-      <div each="g in gaps" id="gap-{g.id}" class="flex items-center gap-2 min-w-0">
-        <img icon="exclamationmark.triangle" alt="" class="size-3.5 shrink-0 text-muted">
-        <span class="min-w-0 flex-1 text-xs text-muted truncate">{g.what}</span>
-      </div>
-    </footer>
-
-    <footer if="keys" id="keys" class="flex flex-wrap items-center gap-x-5 gap-y-2 pb-2">
-      <div each="k in keys" id="k-{k.id}" class="flex items-center gap-1.5">
-        <span class="px-1.5 h-5 flex items-center rounded bg-elevated text-xs font-mono text-secondary">{k.key}</span>
-        <span class="text-xs text-muted">{k.does}</span>
+    <!-- The foot: what could not be shown, in one line, and the keys. -->
+    <footer class="flex flex-wrap items-center gap-x-6 gap-y-2 pb-2">
+      <span if="gaps_line" id="gaps" class="min-w-0 text-xs text-muted truncate">{gaps_line}</span>
+      <div if="keys" id="keys" class="flex flex-wrap items-center gap-x-4 gap-y-2 ml-auto">
+        <div each="k in keys" id="k-{k.id}" class="flex items-center gap-1.5">
+          <span class="px-1.5 h-5 flex items-center rounded bg-elevated text-xs font-mono text-secondary">{k.key}</span>
+          <span class="text-xs text-muted">{k.does}</span>
+        </div>
       </div>
     </footer>
   </div>
