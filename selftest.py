@@ -117,15 +117,24 @@ assert [r["iid"] for r in named["Auto loan past due"]["rows"]] == ["mm3"], "the 
 assert "mm2" not in every and "mm4" not in every, "a promotion or a sales follow-up is on the page"
 assert not any("Newegg" in r["what"] or "patiokits" in r["what"].lower() for sub in subs for r in sub["rows"])
 assert subs[-1]["id"] == "backlog" and [r["iid"] for r in subs[-1]["rows"]] == ["tr2"], "the backlog sits last"
-m.apply_places("selftest", [{"id": "mzz", "to": "backlog"}, {"id": "tzz", "to": "noise"}], {"mzz", "tzz"})
-_r = m.load_subjects("selftest")
+# Under the lock, because that is how PRODUCTION calls it: `apply_places` has
+# exactly one caller (leo-today:1112) and it is already inside
+# `with _regen_lock:`. Called bare here, the write and the read either side of
+# it race the background organiser writing the same record — measured at ~12%
+# of runs across these two assertions. The lock is not reentrant, so the fix
+# cannot go inside `apply_places` without deadlocking its only caller; it
+# belongs here, where the test is the one skipping it.
+with m._regen_lock:
+    m.apply_places("selftest", [{"id": "mzz", "to": "backlog"}, {"id": "tzz", "to": "noise"}], {"mzz", "tzz"})
+    _r = m.load_subjects("selftest")
 assert "mzz" in _r["background"] and "tzz" in _r["background"] and "tzz" not in _r["noise"], \
     "mail is never a chore, and only mail can be spam"
 assert subs[-1]["real"] == "", "a pile cannot be swept"
 # What the model SKIPPED is not hidden. The first real run placed 6 of 45 and
 # an earlier rule sent the other 39 to the background — a friend's surgery
 # among them. A skipped item stays on the page under "New", in the open.
-rec = m.load_subjects("selftest")
+with m._regen_lock:          # same race, same reason
+    rec = m.load_subjects("selftest")
 assert {"mm2", "mm4"} <= set(rec["noise"]) and "e2" in rec["background"]
 skipped = [r["iid"] for r in subs[0]["rows"]] if subs[0]["id"] == "new" else []
 assert skipped and not set(skipped) & set(rec["background"]), "what the model skipped was hidden instead of shown"
