@@ -60,6 +60,26 @@ DAY_FROM, DAY_TO = 7 * 60, 19 * 60
 TINTS = ["blue", "purple", "teal", "orange", "green", "pink", "amber"]
 
 
+def plural(n, one, many=None):
+    """`1 subjects, 4 items` was on this page beside a line four lines away in
+    this file that got it right. One helper, so there is one place to get it
+    wrong."""
+    return f"{n} {one if n == 1 else (many or one + 's')}"
+
+
+def mark_last(rows):
+    """Flag the final row, so the markup can leave its divider off.
+
+    A `border-b` on every row of a grouped list draws a hairline flush
+    against the card's own rounded bottom edge — visible in every render of
+    this page since it had lists. The subset has no `:last-child`, so the
+    producer is where the fact lives.
+    """
+    for i, r in enumerate(rows):
+        r["last"] = "1" if i == len(rows) - 1 else ""
+    return rows
+
+
 def hue(name):
     """A stable colour for a name.
 
@@ -74,6 +94,25 @@ _lock = threading.Lock()
 
 class Gap(Exception):
     """A source did not answer. Carries a sentence a person can read."""
+
+
+def scope_reason(e):
+    """The 403 said WHY in a JSON envelope. Say that, not the envelope.
+
+    The footer draws one line of 12pt muted text per gap. A raw body there is
+    a wall — measured on this box, where two of six gap lines were the hub's
+    `{"error":{"code":"forbidden_scope","message":...}}` cut off mid-sentence
+    at 160 characters. The message inside it is already a sentence; the
+    envelope around it is the only part that was unreadable.
+    """
+    try:
+        body = json.loads((e.read() or b"").decode())
+    except Exception:  # noqa: BLE001 — not JSON, or already consumed
+        return "a scope is missing"
+    msg = ((body.get("error") or {}).get("message")
+           or body.get("message") or body.get("error") or "")
+    msg = str(msg).split(" — ", 1)[0].split(". ", 1)[0].strip().rstrip(".")
+    return (msg[:90] + "…") if len(msg) > 90 else (msg or "a scope is missing")
 
 
 # ---------------------------------------------------------------------------
@@ -106,9 +145,8 @@ def graph(path, token=None, **params):
     try:
         return _call(f"/graph/v1/{path}", token, **params)
     except urllib.error.HTTPError as e:
-        detail = (e.read() or b"").decode()[:160]
         if e.code == 403:
-            raise Gap(f"the hub refused it (403) — a scope is missing: {detail}") from None
+            raise Gap(f"the hub refused it (403) — {scope_reason(e)}") from None
         if e.code == 501:
             raise Gap("this hub does not serve that route") from None
         raise Gap(f"the hub answered {e.code}") from None
@@ -245,6 +283,16 @@ def clock(t):
 
 def minutes(t):
     return t.hour * 60 + t.minute
+
+
+def human_len(mins):
+    """A length a person says out loud. `180m` is a number, `3h` is a length."""
+    if not mins:
+        return ""
+    h, m = divmod(int(mins), 60)
+    if not h:
+        return f"{m}m"
+    return f"{h}h" if not m else f"{h}h {m:02d}m"
 
 
 def lead(start, now):
@@ -702,7 +750,10 @@ def spend(now, _act):
     return {"amount": f"${so_far:,.2f}",
             "note": f"${rate:,.2f} a day — on track for ${projected:,.0f} by month end"
                     if projected else "this month",
-            "tint": "blue", "used": str(int(used * 100)), "rest": str(100 - int(used * 100))}
+            "tint": "red" if used >= 0.9 else ("amber" if used >= 0.75 else "blue"),
+            "scale": "this month so far" if projected else "recorded this period",
+            "cap": f"of ${projected:,.0f} projected" if projected else "",
+            "used": str(int(used * 100)), "rest": str(100 - int(used * 100))}
 
 
 def box(now, _act):
@@ -822,7 +873,7 @@ def build_threads(items, now):
         late = sum(1 for m in members if m.get("late"))
         kinds = {m["kind"] for m in members}
         soonest = min((m["deadline"] for m in members if m.get("deadline")), default=None)
-        bits = [f"{len(members)} items across {len(kinds)} places"]
+        bits = [f"{plural(len(members), 'item')} across {plural(len(kinds), 'place')}"]
         if late:
             bits.append(f"{late} late")
         if soonest:
@@ -835,11 +886,12 @@ def build_threads(items, now):
             "state": " · ".join(bits) + ".",
             "clock": short_when(soonest, now) if soonest else "",
             "do": todo["text"][:40] if todo else "",
-            "ask": f"What's left on {word}?",
-            "more": f"{len(members)} items",
+            "do_id": todo["id"] if todo else "",
+            "ask": f"What's left on {word.capitalize()}?",
             "strands": [{"id": m["id"], "icon": KIND_ICON.get(m["kind"], "circle"),
                          "what": m["text"][:90], "when": m.get("when", ""),
-                         "late": m.get("late", ""), "done": ""} for m in members],
+                         "late": m.get("late", ""), "done": ""}
+                        for m in mark_last(members)],
         })
     return out, used
 
@@ -860,31 +912,46 @@ def day_strip(evs, now):
         s, t = max(lo, minutes(e["at"])), 0
         t = min(hi, s + e["mins"])
         if s > cursor:
-            interior = any(not b["free"] for b in blocks)
             blocks.append({"id": f"f{len(blocks)}", "span": str(s - cursor), "free": "1",
-                           "tint": "", "label": gap_label(s - cursor) if interior else ""})
+                           "tint": "", "label": gap_label(s - cursor, hi - lo)})
         if t > s:
             blocks.append({"id": e["id"], "span": str(t - s), "free": "", "tint": e["tint"],
-                           "label": strip_label(e["title"], t - s)})
+                           "label": strip_label(e["title"], t - s, hi - lo)})
         cursor = max(cursor, t)
     if hi > cursor:
         blocks.append({"id": "fz", "span": str(hi - cursor), "free": "1", "tint": "",
-                       "label": ""})
+                       "label": gap_label(hi - cursor, hi - lo)})
     pos = min(max(minutes(now), lo), hi)
     at = {"before": str(pos - lo), "after": str(hi - pos), "label": clock(now)}
     booked = sum(int(b["span"]) for b in blocks if not b["free"])
+    # The biggest clear stretch used to be appended here too. It is drawn ON
+    # the strip now — in the block it is actually about — so repeating it
+    # under the strip is the same fact twice, four inches apart.
     note = f"{booked // 60}h {booked % 60:02d}m booked" if booked else "nothing booked"
-    biggest = max((int(b["span"]) for b in blocks if b["free"]), default=0)
-    if biggest >= 90:
-        note += f" · {biggest // 60}h clear"
     return blocks, at, {"from": f"{lo // 60:02d}:{lo % 60:02d}",
                         "to": f"{hi // 60:02d}:{hi % 60:02d}", "note": note}
 
 
 STRIP_NOISE = re.compile(r"\b(meeting|call|sync|standup|review|session|appointment|1:1)\b", re.I)
 
+# What the track is actually worth, in points, at a window narrow enough that
+# the answer holds at every width that draws two columns. Measured off the
+# 1280pt render: ~1050pt of track, `px-2` each side, `text-xs` at about 6.6pt
+# a character. 700 is the NARROWEST width that still draws these labels at
+# all — the markup hides them below `md:`, so a 768pt window is the floor —
+# because a label the painter has to cut is worse than no label, and the rail
+# beside the strip has the full name either way.
+TRACK_PT, BLOCK_PAD, CHAR_PT = 700.0, 18.0, 6.6
 
-def strip_label(title, span):
+
+def fits(span, total):
+    """How many characters a block of `span` minutes can actually hold."""
+    if not total:
+        return 0
+    return int((span / total * TRACK_PT - BLOCK_PAD) / CHAR_PT)
+
+
+def strip_label(title, span, total):
     """The longest WHOLE-WORD name that fits the width there is.
 
     Three rules, each paid for by a bad render:
@@ -897,7 +964,7 @@ def strip_label(title, span):
       one honest word is a block whose label belongs in the rail instead,
       and the rail has it.
     """
-    room = (span // 15) * 4
+    room = fits(span, total)
     if room < 4:
         return ""
     parts = title.strip().split()
@@ -915,12 +982,21 @@ def strip_label(title, span):
     return out
 
 
-def gap_label(span):
-    """A gap says how long it is only when it is long enough to matter."""
+def gap_label(span, total):
+    """A gap says how long it is, when it is long enough to matter and wide
+    enough to hold the words. Both halves are needed: 90 minutes is the
+    threshold for caring, and the width is the threshold for reading."""
     if span < 90:
         return ""
+    room = fits(span, total)
     h, m = divmod(span, 60)
-    return f"{h} hours clear" if not m else f"{h}h {m:02d}m clear"
+    long_form = f"{h} hours clear" if not m else f"{h}h {m:02d}m clear"
+    short_form = f"{h}h clear" if not m else f"{h}h{m:02d} clear"
+    if room >= len(long_form):
+        return long_form
+    if room >= len(short_form):
+        return short_form
+    return "clear" if room >= 5 else ""
 
 
 # ---------------------------------------------------------------------------
@@ -987,7 +1063,7 @@ def payload(grant=None, user=""):
     d = {"loaded": "1",
          "greeting": greeting(now),
          "date_line": now.strftime("%-d %B · week %V"),
-         "keys": [{"id": "k1", "key": "j k", "does": "move through threads"},
+         "keys": [{"id": "k1", "key": "j k", "does": "move through tasks"},
                   {"id": "k2", "key": "e", "does": "tick off"},
                   {"id": "k3", "key": "/", "does": "ask"}]}
 
@@ -1002,7 +1078,7 @@ def payload(grant=None, user=""):
         d["weather"] = got["weather"]
     around = (got.get("house") or []) + (got.get("whereis") or []) + (got.get("box") or [])
     if around:
-        d["house"] = around[:8]
+        d["house"] = mark_last(around[:8])
     if got.get("money"):
         d["money"] = got["money"]
     if got.get("spend"):
@@ -1021,11 +1097,14 @@ def payload(grant=None, user=""):
             phrase = phrase.rsplit(" ", 1)[0]  # the time is beside it already
         d["now"] = {"lead": phrase, "time": clock(nxt["at"]),
                     "title": nxt["title"],
-                    "where": " · ".join(x for x in (nxt["where"], f"{nxt['mins']}m") if x),
-                    "join": "", "faces": []}
+                    "where": nxt["where"],
+                    "len": human_len(nxt["mins"]) if not nxt["allday"] else "All day",
+                    "join": "", "join_ask": "", "faces": []}
         rail, today = [], [e for e in evs if e["at"].date() == now.date() or e["live_now"]]
         for i, e in enumerate(today[:SHOWN]):
-            rail.append({"id": e["id"], "time": clock(e["at"]), "title": e["title"],
+            rail.append({"id": e["id"],
+                         "time": "all day" if e["allday"] else clock(e["at"]),
+                         "title": e["title"],
                          "tint": e["tint"], "free": "", "what": "",
                          "done": "1" if e["at"] + timedelta(minutes=e["mins"]) < now else "",
                          "live": "1" if (not e["allday"]
@@ -1055,12 +1134,13 @@ def payload(grant=None, user=""):
     threads, used = build_threads(items, now)
     if threads:
         d["threads"] = threads
-        d["threads_note"] = f"{len(threads)} subjects, {sum(len(t['strands']) for t in threads)} items"
+        d["threads_note"] = (plural(len(threads), "subject") + ", "
+                             + plural(sum(len(t["strands"]) for t in threads), "item"))
     elif items:
         kinds = len({i["kind"] for i in items})
         d["no_threads"] = (
-            f"Nothing spans two places today — {len(items)} items across {kinds} "
-            f"{'source' if kinds == 1 else 'sources'}, none of them about the same thing."
+            f"Nothing spans two places today — {plural(len(items), 'item')} across "
+            f"{plural(kinds, 'source')}, none of them about the same thing."
         )
 
     # Whatever no subject claimed, and only what is due
@@ -1073,8 +1153,9 @@ def payload(grant=None, user=""):
               "late": i.get("late", ""), "done": "", "icon": KIND_ICON.get(i["kind"], "circle")}
              for i in rest]
     if loose:
-        d["loose"] = loose[:4]
-        d["loose_note"] = f"4 of {len(loose)}" if len(loose) > 4 else str(len(loose))
+        d["loose"] = mark_last(loose[:4])
+        d["loose_note"] = (f"4 of {len(loose)}" if len(loose) > 4
+                           else plural(len(loose), "item"))
 
     # The briefing. Cached against what it is about; served stale and
     # rewritten behind the page when that changes. Never blocks.

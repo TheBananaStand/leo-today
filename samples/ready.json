@@ -1,24 +1,269 @@
 {
-  "loaded": "1",
-  "next": { "lead": "In 25 minutes", "time": "9:30", "title": "Standup with the build team", "where": "Zoom", "icon": "person.2", "tint": "blue" },
-  "events_note": "4 events",
-  "events": [
-    { "id": "1", "time": "9:30", "title": "Standup with the build team", "where": "Zoom", "tint": "blue", "now": "" },
-    { "id": "2", "time": "11:00", "title": "Dentist", "where": "Dentist's office", "tint": "teal", "now": "" },
-    { "id": "3", "time": "14:00", "title": "Quarterly review", "where": "Conference room", "tint": "purple", "now": "" },
-    { "id": "4", "time": "18:30", "title": "Dinner with friends", "where": "Osteria", "tint": "orange", "now": "" }
-  ],
-  "tasks_note": "3 of 7",
-  "tasks": [
-    { "id": "t1", "title": "Renew the passport", "due": "4 days late", "overdue": "1", "done": "" },
-    { "id": "t2", "title": "Send the Q4 numbers to accounting", "due": "Today", "overdue": "", "done": "" },
-    { "id": "t3", "title": "Book the flights for the Austin trip", "due": "Tomorrow", "overdue": "", "done": "" }
-  ],
+ "loaded": "1",
+ "greeting": "Monday afternoon",
+ "date_line": "23 November · week 48",
+ "keys": [
+  {
+   "id": "k1",
+   "key": "j k",
+   "does": "move through tasks"
+  },
+  {
+   "id": "k2",
+   "key": "e",
+   "does": "tick off"
+  },
+  {
+   "id": "k3",
+   "key": "/",
+   "does": "ask"
+  }
+ ],
+ "weather": {
+  "temp": "5°",
+  "range": "2° / 7°",
+  "condition": "Cloudy now, today",
+  "symbol": "cloud.sun",
+  "tint": "blue"
+ },
+ "house": [
+  {
+   "id": "h0",
+   "icon": "lock.open",
+   "tint": "red",
+   "what": "Front Door is unlocked",
+   "detail": "",
+   "last": ""
+  },
+  {
+   "id": "w0",
+   "icon": "location",
+   "tint": "green",
+   "what": "Scott — 3 Maple St",
+   "detail": "2h ago",
+   "last": ""
+  },
+  {
+   "id": "b0",
+   "icon": "clock.badge.exclamationmark",
+   "tint": "amber",
+   "what": "Nightly release is failing",
+   "detail": "last ran 11:15 22 Nov",
+   "last": ""
+  },
+  {
+   "id": "b1",
+   "icon": "shippingbox",
+   "tint": "teal",
+   "what": "1 build landed, unannounced",
+   "detail": "1.4.0",
+   "last": "1"
+  }
+ ],
+ "money": {
+  "amount": "$2,341",
+  "note": "Travel is the largest at $980",
+  "tint": "blue",
+  "used": "0",
+  "rest": "1"
+ },
+ "spend": {
+  "amount": "$137.42",
+  "note": "$5.97 a day — on track for $179 by month end",
+  "tint": "amber",
+  "scale": "this month so far",
+  "cap": "of $179 projected",
+  "used": "76",
+  "rest": "24"
+ },
+ "strip": [
+  {
+   "id": "f0",
+   "span": "60",
+   "free": "1",
+   "tint": "",
+   "label": ""
+  },
+  {
+   "id": "1",
+   "span": "60",
+   "free": "",
+   "tint": "blue",
+   "label": ""
+  },
+  {
+   "id": "f2",
+   "span": "60",
+   "free": "1",
+   "tint": "",
+   "label": ""
+  },
+  {
+   "id": "3",
+   "span": "60",
+   "free": "",
+   "tint": "blue",
+   "label": "Weekly"
+  },
+  {
+   "id": "fz",
+   "span": "480",
+   "free": "1",
+   "tint": "",
+   "label": "8 hours clear"
+  }
+ ],
+ "at": {
+  "before": "596",
+  "after": "124",
+  "label": "16:56"
+ },
+ "strip_from": "07:00",
+ "strip_to": "19:00",
+ "strip_note": "2h 00m booked",
+ "now": {
+  "lead": "Tomorrow",
+  "time": "08:00",
+  "title": "Flight to Austin",
+  "where": "",
+  "len": "3h",
+  "join": "",
+  "join_ask": "",
+  "faces": []
+ },
+ "rail": [
+  {
+   "id": "2",
+   "time": "all day",
+   "title": "Mike surgery",
+   "tint": "orange",
+   "free": "",
+   "what": "",
+   "done": "1",
+   "live": "",
+   "last": "",
+   "leave": "",
+   "tight": ""
+  },
+  {
+   "id": "1",
+   "time": "08:00",
+   "title": "Engineering Product Meeting",
+   "tint": "blue",
+   "free": "",
+   "what": "",
+   "done": "1",
+   "live": "",
+   "last": "",
+   "leave": "",
+   "tight": ""
+  },
+  {
+   "id": "3",
+   "time": "10:00",
+   "title": "Weekly Sales Meeting",
+   "tint": "blue",
+   "free": "",
+   "what": "",
+   "done": "1",
+   "live": "",
+   "last": "1",
+   "leave": "",
+   "tight": ""
+  }
+ ],
+ "rail_note": "3 today",
+ "threads": [
+  {
+   "id": "austin",
+   "tint": "green",
+   "icon": "calendar",
+   "title": "Austin",
+   "state": "4 items across 3 places · 1 late · next tomorrow.",
+   "clock": "tomorrow",
+   "do": "Renew the passport for Austin",
+   "do_id": "tr1",
+   "ask": "What's left on Austin?",
+   "strands": [
+    {
+     "id": "tr1",
+     "icon": "checkmark.square",
+     "what": "Renew the passport for Austin",
+     "when": "4 days late",
+     "late": "1",
+     "done": ""
+    },
+    {
+     "id": "tr3",
+     "icon": "checkmark.square",
+     "what": "Book the Austin flights",
+     "when": "Today",
+     "late": "",
+     "done": ""
+    },
+    {
+     "id": "mm1",
+     "icon": "envelope",
+     "what": "Maya Chen — Austin itinerary — need your dates",
+     "when": "",
+     "late": "",
+     "done": ""
+    },
+    {
+     "id": "e4",
+     "icon": "calendar",
+     "what": "Flight to Austin",
+     "when": "08:00 tomorrow",
+     "late": "",
+     "done": ""
+    }
+   ]
+  }
+ ],
+ "threads_note": "1 subject, 4 items",
+ "loose": [
+  {
+   "id": "tr2",
+   "what": "Fix light switch",
+   "when": "5 months",
+   "late": "",
+   "done": "",
+   "icon": "checkmark.square",
+   "last": "1"
+  }
+ ],
+ "loose_note": "1 item",
+ "brief": {
+  "headline": "Three meetings done, afternoon clear.",
+  "focus": {
+   "what": "Answer Maya",
+   "why": "She has asked twice and you fly tomorrow."
+  },
   "notes": [
-    { "id": "n1", "icon": "exclamationmark.triangle", "tint": "amber", "title": "Amex is running hot this week", "body": "$2,341 against a usual $1,400 by Monday — mostly the two flights booked on Saturday.", "when": "7:02" },
-    { "id": "n2", "icon": "lock.open", "tint": "red", "title": "Garage door was left open overnight", "body": "Open from 23:40 until 06:15. Closed now.", "when": "6:15" },
-    { "id": "n3", "icon": "newspaper", "tint": "blue", "title": "Three things in the news you follow", "body": "Rust 1.9 lands const generics; the Fed holds; Apple ships a new Studio.", "when": "5:30" }
+   {
+    "id": "bn0",
+    "what": "Flight at 08:00",
+    "why": "Earlier than your usual start."
+   }
   ],
-  "all_clear": "",
-  "gaps": []
+  "mood": "busy",
+  "age": "just now",
+  "stale": "1",
+  "tint": "amber",
+  "icon": "flame"
+ },
+ "suggestions": [
+  {
+   "id": "s0",
+   "text": "What should I do first?"
+  },
+  {
+   "id": "saustin",
+   "text": "What's left on Austin?"
+  },
+  {
+   "id": "sl",
+   "text": "What's late and why?"
+  }
+ ]
 }

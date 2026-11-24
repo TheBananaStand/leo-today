@@ -1,5 +1,22 @@
-{ "loaded": "1", "nothing_worked": "1",
-  "why": "The hub answered 403 for calendar:read — this package's token is missing that scope. Reminders and the feed timed out.",
-  "events": [], "tasks": [], "notes": [],
-  "gaps": [ { "id": "calendar", "what": "Calendar didn't answer — 403, scope calendar:read." },
-            { "id": "reminders", "what": "Reminders didn't answer (timed out after 2s)." } ] }
+{
+ "loaded": "1",
+ "greeting": "Monday afternoon",
+ "date_line": "23 November · week 48",
+ "nothing_worked": "1",
+ "why": "Nothing answered: the hub refused it (403) — this endpoint answers for one person and a package credential names none.",
+ "gaps": [
+  {
+   "id": "calendar",
+   "what": "Calendar didn't answer — it timed out after 2.5s."
+  },
+  {
+   "id": "reminders",
+   "what": "Reminders didn't answer — the hub refused it (403) — this endpoint answers for one person."
+  },
+  {
+   "id": "feed",
+   "what": "Feed didn't answer — no acting credential — this block is per-person."
+  }
+ ],
+ "keys": []
+}

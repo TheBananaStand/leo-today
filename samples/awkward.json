@@ -1,357 +1,301 @@
 {
  "loaded": "1",
- "next": {
-  "lead": "Now",
-  "time": "7:00",
-  "title": "A meeting whose title runs on and on and will not fit in the row it is given",
-  "where": "Somewhere with a very long room name indeed",
-  "icon": "person.2",
+ "greeting": "Monday afternoon, and it is going to be a long one",
+ "date_line": "23 November · week 48 · day 327 of 365 · 38 days to the end of the year",
+ "keys": [
+  {
+   "id": "k1",
+   "key": "j k",
+   "does": "move through tasks"
+  },
+  {
+   "id": "k2",
+   "key": "e",
+   "does": "tick off"
+  },
+  {
+   "id": "k3",
+   "key": "/",
+   "does": "ask"
+  }
+ ],
+ "weather": {
+  "temp": "5°",
+  "range": "2° / 7°",
+  "condition": "Cloudy now, today",
+  "symbol": "cloud.sun",
   "tint": "blue"
  },
- "events_note": "6 events",
- "events": [
+ "house": [
   {
-   "id": "e0",
-   "time": "7:00",
-   "title": "A meeting whose title runs on and on and will not fit in the row it is given, no matter how wide the window",
-   "where": "Somewhere with a very long room name indeed",
-   "tint": "blue",
-   "now": "1"
+   "id": "h0",
+   "icon": "lock.open",
+   "tint": "red",
+   "what": "Front Door is unlocked",
+   "detail": "",
+   "last": ""
   },
   {
-   "id": "e1",
-   "time": "7:30",
-   "title": "A meeting whose title runs on and on and will not fit in the row it is given, no matter how wide the window",
-   "where": "Somewhere with a very long room name indeed",
-   "tint": "blue",
-   "now": ""
+   "id": "w0",
+   "icon": "location",
+   "tint": "green",
+   "what": "Scott — 3 Maple St",
+   "detail": "2h ago",
+   "last": ""
   },
   {
-   "id": "e2",
-   "time": "8:00",
-   "title": "A meeting whose title runs on and on and will not fit in the row it is given, no matter how wide the window",
-   "where": "Somewhere with a very long room name indeed",
-   "tint": "blue",
-   "now": ""
+   "id": "b0",
+   "icon": "clock.badge.exclamationmark",
+   "tint": "amber",
+   "what": "Nightly release is failing",
+   "detail": "last ran 11:15 22 Nov",
+   "last": ""
   },
   {
-   "id": "e3",
-   "time": "8:30",
-   "title": "A meeting whose title runs on and on and will not fit in the row it is given, no matter how wide the window",
-   "where": "Somewhere with a very long room name indeed",
-   "tint": "blue",
-   "now": ""
-  },
-  {
-   "id": "e4",
-   "time": "9:00",
-   "title": "A meeting whose title runs on and on and will not fit in the row it is given, no matter how wide the window",
-   "where": "Somewhere with a very long room name indeed",
-   "tint": "blue",
-   "now": ""
-  },
-  {
-   "id": "e5",
-   "time": "9:30",
-   "title": "A meeting whose title runs on and on and will not fit in the row it is given, no matter how wide the window",
-   "where": "Somewhere with a very long room name indeed",
-   "tint": "blue",
-   "now": ""
+   "id": "b1",
+   "icon": "shippingbox",
+   "tint": "teal",
+   "what": "1 build landed, unannounced",
+   "detail": "1.4.0",
+   "last": "1"
   }
  ],
- "tasks_note": "40 of 40",
- "tasks": [
+ "money": {
+  "amount": "$2,341",
+  "note": "Travel is the largest at $980 — well above the usual $410 by this point in the month",
+  "tint": "blue",
+  "used": "0",
+  "rest": "1"
+ },
+ "spend": {
+  "amount": "$116,674.86",
+  "note": "$5.97 a day — on track for $179 by month end",
+  "tint": "red",
+  "scale": "this month so far",
+  "cap": "of $179 projected",
+  "used": "96",
+  "rest": "4"
+ },
+ "strip": [
   {
-   "id": "t0",
-   "title": "Chase the vendor about the replacement part that was supposed to arrive a fortnight ago and has not",
-   "due": "4 days late",
-   "overdue": "1",
-   "done": ""
+   "id": "f0",
+   "span": "60",
+   "free": "1",
+   "tint": "",
+   "label": ""
   },
   {
-   "id": "t1",
-   "title": "Task number 1 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t2",
-   "title": "Task number 2 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t3",
-   "title": "Task number 3 with a perfectly ordinary name",
-   "due": "4 days late",
-   "overdue": "1",
-   "done": ""
-  },
-  {
-   "id": "t4",
-   "title": "Task number 4 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t5",
-   "title": "Task number 5 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t6",
-   "title": "Task number 6 with a perfectly ordinary name",
-   "due": "4 days late",
-   "overdue": "1",
-   "done": ""
-  },
-  {
-   "id": "t7",
-   "title": "Task number 7 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t8",
-   "title": "Task number 8 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t9",
-   "title": "Task number 9 with a perfectly ordinary name",
-   "due": "4 days late",
-   "overdue": "1",
-   "done": ""
-  },
-  {
-   "id": "t10",
-   "title": "Task number 10 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t11",
-   "title": "Task number 11 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t12",
-   "title": "Task number 12 with a perfectly ordinary name",
-   "due": "4 days late",
-   "overdue": "1",
-   "done": ""
-  },
-  {
-   "id": "t13",
-   "title": "Task number 13 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t14",
-   "title": "Task number 14 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t15",
-   "title": "Task number 15 with a perfectly ordinary name",
-   "due": "4 days late",
-   "overdue": "1",
-   "done": ""
-  },
-  {
-   "id": "t16",
-   "title": "Task number 16 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t17",
-   "title": "Task number 17 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t18",
-   "title": "Task number 18 with a perfectly ordinary name",
-   "due": "4 days late",
-   "overdue": "1",
-   "done": ""
-  },
-  {
-   "id": "t19",
-   "title": "Task number 19 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t20",
-   "title": "Task number 20 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t21",
-   "title": "Task number 21 with a perfectly ordinary name",
-   "due": "4 days late",
-   "overdue": "1",
-   "done": ""
-  },
-  {
-   "id": "t22",
-   "title": "Task number 22 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t23",
-   "title": "Task number 23 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t24",
-   "title": "Task number 24 with a perfectly ordinary name",
-   "due": "4 days late",
-   "overdue": "1",
-   "done": ""
-  },
-  {
-   "id": "t25",
-   "title": "Task number 25 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t26",
-   "title": "Task number 26 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t27",
-   "title": "Task number 27 with a perfectly ordinary name",
-   "due": "4 days late",
-   "overdue": "1",
-   "done": ""
-  },
-  {
-   "id": "t28",
-   "title": "Task number 28 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t29",
-   "title": "Task number 29 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t30",
-   "title": "Task number 30 with a perfectly ordinary name",
-   "due": "4 days late",
-   "overdue": "1",
-   "done": ""
-  },
-  {
-   "id": "t31",
-   "title": "Task number 31 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t32",
-   "title": "Task number 32 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t33",
-   "title": "Task number 33 with a perfectly ordinary name",
-   "due": "4 days late",
-   "overdue": "1",
-   "done": ""
-  },
-  {
-   "id": "t34",
-   "title": "Task number 34 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t35",
-   "title": "Task number 35 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t36",
-   "title": "Task number 36 with a perfectly ordinary name",
-   "due": "4 days late",
-   "overdue": "1",
-   "done": ""
-  },
-  {
-   "id": "t37",
-   "title": "Task number 37 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t38",
-   "title": "Task number 38 with a perfectly ordinary name",
-   "due": "Today",
-   "overdue": "",
-   "done": ""
-  },
-  {
-   "id": "t39",
-   "title": "Task number 39 with a perfectly ordinary name",
-   "due": "4 days late",
-   "overdue": "1",
-   "done": ""
-  }
- ],
- "notes": [
-  {
-   "id": "n1",
-   "icon": "newspaper",
+   "id": "1",
+   "span": "60",
+   "free": "",
    "tint": "blue",
-   "title": "A headline that is itself much too long to sit on one line and so must be clamped",
-   "body": "A body that goes on for a good while longer than two lines would ever allow, which is the point of the test: it must clamp rather than push the row open to an unbounded height. And on it goes.",
-   "when": "5:30"
+   "label": ""
+  },
+  {
+   "id": "f2",
+   "span": "60",
+   "free": "1",
+   "tint": "",
+   "label": ""
+  },
+  {
+   "id": "3",
+   "span": "60",
+   "free": "",
+   "tint": "blue",
+   "label": "Weekly"
+  },
+  {
+   "id": "fz",
+   "span": "480",
+   "free": "1",
+   "tint": "",
+   "label": "8 hours clear"
   }
  ],
- "all_clear": "",
- "gaps": []
+ "at": {
+  "before": "592",
+  "after": "128",
+  "label": "16:52"
+ },
+ "strip_from": "07:00",
+ "strip_to": "19:00",
+ "strip_note": "2h 00m booked",
+ "now": {
+  "lead": "Tomorrow",
+  "time": "08:00",
+  "title": "Quarterly review with the whole of engineering and the two leads from product",
+  "where": "Conference room B, third floor, the one past the kitchen",
+  "len": "3h",
+  "join": "Join the call",
+  "join_ask": "What is the quarterly review about?",
+  "faces": [
+   {
+    "id": "f1",
+    "initials": "SR",
+    "tint": "blue"
+   },
+   {
+    "id": "f2",
+    "initials": "MK",
+    "tint": "green"
+   },
+   {
+    "id": "f3",
+    "initials": "AB",
+    "tint": "purple"
+   }
+  ]
+ },
+ "rail": [
+  {
+   "id": "2",
+   "time": "all day",
+   "title": "Mike surgery",
+   "tint": "orange",
+   "free": "",
+   "what": "",
+   "done": "1",
+   "live": "",
+   "last": "",
+   "leave": "",
+   "tight": ""
+  },
+  {
+   "id": "1",
+   "time": "08:00",
+   "title": "Engineering Product Meeting",
+   "tint": "blue",
+   "free": "",
+   "what": "",
+   "done": "1",
+   "live": "",
+   "last": "",
+   "leave": "",
+   "tight": ""
+  },
+  {
+   "id": "3",
+   "time": "10:00",
+   "title": "Weekly Sales Meeting",
+   "tint": "blue",
+   "free": "",
+   "what": "",
+   "done": "1",
+   "live": "",
+   "last": "1",
+   "leave": "",
+   "tight": ""
+  }
+ ],
+ "rail_note": "3 today",
+ "threads": [
+  {
+   "id": "austin",
+   "tint": "green",
+   "icon": "calendar",
+   "title": "Austin trip on Thursday, with the conference and two customer visits either side",
+   "state": "4 items across 3 places · 1 late · next tomorrow.",
+   "clock": "tomorrow",
+   "do": "Renew the passport before the Austin trip or there is no Austin trip",
+   "do_id": "tr1",
+   "ask": "What is still outstanding for the whole of the Austin trip?",
+   "more": "4 items",
+   "strands": [
+    {
+     "id": "tr1",
+     "icon": "checkmark.square",
+     "what": "Delta — your boarding pass for DL1422 departing Austin-Bergstrom at 07:40 is ready",
+     "when": "4 days late",
+     "late": "1",
+     "done": ""
+    },
+    {
+     "id": "tr3",
+     "icon": "checkmark.square",
+     "what": "Delta — your boarding pass for DL1422 departing Austin-Bergstrom at 07:40 is ready",
+     "when": "Today",
+     "late": "",
+     "done": ""
+    },
+    {
+     "id": "mm1",
+     "icon": "envelope",
+     "what": "Delta — your boarding pass for DL1422 departing Austin-Bergstrom at 07:40 is ready",
+     "when": "",
+     "late": "",
+     "done": ""
+    },
+    {
+     "id": "e4",
+     "icon": "calendar",
+     "what": "Delta — your boarding pass for DL1422 departing Austin-Bergstrom at 07:40 is ready",
+     "when": "08:00 tomorrow",
+     "late": "",
+     "done": ""
+    }
+   ]
+  }
+ ],
+ "threads_note": "1 subjects, 4 items",
+ "loose": [
+  {
+   "id": "tr2",
+   "what": "Reply to the insurance adjuster about the roof claim and attach the four photographs",
+   "when": "5 months",
+   "late": "",
+   "done": "",
+   "icon": "checkmark.square",
+   "last": "1"
+  }
+ ],
+ "loose_note": "1",
+ "brief": {
+  "headline": "Three meetings done and two still to go; Mike's surgery finished at eleven; five months of household tasks are overdue and the nightly release has been failing since Saturday.",
+  "focus": {
+   "what": "Fix the nightly release before anything else, because every hour it stays broken is another commit nobody has built",
+   "why": "She has asked twice and you fly tomorrow."
+  },
+  "notes": [
+   {
+    "id": "bn0",
+    "what": "Flight at 08:00",
+    "why": "Earlier than your usual start."
+   }
+  ],
+  "mood": "busy",
+  "age": "just now",
+  "stale": "1",
+  "tint": "amber",
+  "icon": "flame"
+ },
+ "suggestions": [
+  {
+   "id": "s0",
+   "text": "What should I do first?"
+  },
+  {
+   "id": "s1",
+   "text": "What's overdue?"
+  },
+  {
+   "id": "s2",
+   "text": "Summarise the Austin trip"
+  },
+  {
+   "id": "s3",
+   "text": "Anything from Katie?"
+  },
+  {
+   "id": "s4",
+   "text": "What did I miss?"
+  }
+ ],
+ "gaps": [
+  {
+   "id": "tasks",
+   "what": "Tasks didn't answer — the hub refused it (403) — Missing required scope: this endpoint answers for one person and a package credential names none"
+  }
+ ],
+ "changed": "3 new since 14:10"
 }

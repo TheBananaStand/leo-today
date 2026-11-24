@@ -1,1 +1,26 @@
-{ "loaded": "1", "all_clear": "1", "day_line": "Clear all day", "day_detail": "Nothing scheduled, nothing due.", "events": [], "tasks": [], "notes": [], "gaps": [] }
+{
+ "loaded": "1",
+ "greeting": "Monday afternoon",
+ "date_line": "23 November · week 48",
+ "weather": {
+  "temp": "5°",
+  "range": "2° / 7°",
+  "condition": "Cloudy now, today",
+  "symbol": "cloud.sun",
+  "tint": "blue"
+ },
+ "all_clear": "1",
+ "suggestions": [
+  {
+   "id": "s0",
+   "text": "What's on this week?"
+  }
+ ],
+ "keys": [
+  {
+   "id": "k3",
+   "key": "/",
+   "does": "ask"
+  }
+ ]
+}
