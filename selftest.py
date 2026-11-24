@@ -69,7 +69,7 @@ def _graph(path, token=None, **kw):
 
 m.graph = _graph
 m.tool = lambda name, args, tok: (
-    json.dumps(INBOX) if name == "email" else
+    (json.dumps(INBOX) if not args.get("offset") else "No messages in inbox.") if name == "email" else
     json.dumps(HOUSE) if name == "home_assistant" else
     json.dumps({"total_spending": 2341.0,
                 "categories": [{"category_name": "Travel", "total": 980.0}]}) if name == "finance" else

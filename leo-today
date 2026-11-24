@@ -487,7 +487,15 @@ def mail(now, act):
     """
     out, seen = [], set()
     for offset in (0, 50):
-        raw = json.loads(tool("email", {"action": "list_inbox", "limit": 50, "offset": offset}, act))
+        text = tool("email", {"action": "list_inbox", "limit": 50, "offset": offset}, act)
+        try:
+            raw = json.loads(text)
+        except Exception:  # noqa: BLE001
+            # MEASURED: past the last message the tool answers the SENTENCE
+            # "No messages in inbox." rather than `[]`. Parsing that as JSON
+            # failed the whole source, so asking for a second page is what
+            # took the first page off the screen.
+            raw = None
         if not isinstance(raw, list) or not raw:
             break
         for m in raw:
