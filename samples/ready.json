@@ -25,7 +25,7 @@
   {
    "id": "mail",
    "label": "Mail",
-   "n": "1",
+   "n": "2",
    "icon": "envelope",
    "tint": "blue",
    "route": "/inbox"
@@ -107,170 +107,29 @@
  },
  "subjects": [
   {
-   "id": "new",
-   "title": "New",
-   "state": "Being sorted into your subjects…",
-   "tint": "gray",
-   "icon": "tray",
-   "note": "10 items",
-   "count": "10",
-   "rows": [
-    {
-     "id": "new-e2",
-     "kind": "event",
-     "icon": "calendar",
-     "tint": "purple",
-     "what": "Mike surgery",
-     "when": "all day",
-     "late": "",
-     "route": "/calendar?day=2026-11-23",
-     "dim": "",
-     "iid": "e2",
-     "last": ""
-    },
-    {
-     "id": "new-e1",
-     "kind": "event",
-     "icon": "calendar",
-     "tint": "purple",
-     "what": "Engineering Product Meeting",
-     "when": "08:00",
-     "late": "",
-     "route": "/calendar?day=2026-11-23",
-     "dim": "1",
-     "iid": "e1",
-     "last": ""
-    },
-    {
-     "id": "new-e3",
-     "kind": "event",
-     "icon": "calendar",
-     "tint": "purple",
-     "what": "Weekly Sales Meeting",
-     "when": "10:00",
-     "late": "",
-     "route": "/calendar?day=2026-11-23",
-     "dim": "1",
-     "iid": "e3",
-     "last": ""
-    },
-    {
-     "id": "new-home-8d75282c64",
-     "kind": "home",
-     "icon": "lock.open",
-     "tint": "red",
-     "what": "Front Door is unlocked",
-     "when": "",
-     "late": "",
-     "route": "/dashboard",
-     "dim": "",
-     "iid": "home-8d75282c64",
-     "last": ""
-    },
-    {
-     "id": "new-hub-3f4f948776",
-     "kind": "hub",
-     "icon": "clock.badge.exclamationmark",
-     "tint": "amber",
-     "what": "Nightly release is failing",
-     "when": "last ran 11:15 22 Nov",
-     "late": "",
-     "route": "/logs",
-     "dim": "",
-     "iid": "hub-3f4f948776",
-     "last": ""
-    },
-    {
-     "id": "new-hub-53a705a75b",
-     "kind": "hub",
-     "icon": "shippingbox",
-     "tint": "teal",
-     "what": "1 build landed, unannounced",
-     "when": "1.4.0",
-     "late": "",
-     "route": "/logs",
-     "dim": "",
-     "iid": "hub-53a705a75b",
-     "last": ""
-    },
-    {
-     "id": "new-nf1",
-     "kind": "note",
-     "icon": "sparkles",
-     "tint": "teal",
-     "what": "Amex is running hot",
-     "when": "19:56",
-     "late": "",
-     "route": "/feed?selectedId=f1",
-     "dim": "",
-     "iid": "nf1",
-     "last": ""
-    },
-    {
-     "id": "new-people-0a0a0da94f",
-     "kind": "people",
-     "icon": "location",
-     "tint": "green",
-     "what": "Scott — 3 Maple St",
-     "when": "5h ago",
-     "late": "",
-     "route": "",
-     "dim": "",
-     "iid": "people-0a0a0da94f",
-     "last": ""
-    },
-    {
-     "id": "new-money",
-     "kind": "money",
-     "icon": "creditcard",
-     "tint": "blue",
-     "what": "$2,341 spent this month",
-     "when": "Travel is the largest at $980",
-     "late": "",
-     "route": "",
-     "dim": "",
-     "iid": "money",
-     "last": ""
-    },
-    {
-     "id": "new-spend",
-     "kind": "hub",
-     "icon": "cpu",
-     "tint": "amber",
-     "what": "$137.42 on models this month",
-     "when": "$5.97 a day — on track for $179 by month end",
-     "late": "",
-     "route": "/p/costs/spend",
-     "dim": "",
-     "iid": "spend",
-     "last": "1"
-    }
-   ]
-  },
-  {
    "id": "s2",
-   "title": "Around the house",
-   "state": "One chore, five months old.",
+   "title": "Auto loan past due",
+   "state": "Wells Fargo says the payment is late.",
    "tint": "pink",
-   "icon": "checklist",
+   "icon": "envelope",
    "note": "1 item",
    "count": "1",
    "real": "1",
    "sweeping": "",
-   "sweep_note": "Too broad to sweep — name one project or person. Rename it to one person, project or trip.",
+   "sweep_note": "",
    "found": [],
    "rows": [
     {
-     "id": "s2-tr2",
-     "kind": "task",
-     "icon": "checkmark.circle",
-     "tint": "orange",
-     "what": "Fix light switch",
-     "when": "5 months",
+     "id": "s2-mm3",
+     "kind": "mail",
+     "icon": "envelope",
+     "tint": "blue",
+     "what": "Wells Fargo — Your auto loan payment is past due",
+     "when": "",
      "late": "",
-     "route": "/reminders",
+     "route": "/inbox?selectedId=m3",
      "dim": "",
-     "iid": "tr2",
+     "iid": "mm3",
      "last": "1"
     }
    ]
@@ -285,27 +144,8 @@
    "count": "4",
    "real": "1",
    "sweeping": "",
-   "sweep_note": "Found 2 things that may belong.",
-   "found": [
-    {
-     "id": "s1-0",
-     "key": "knowledge:k1",
-     "what": "Austin conference notes",
-     "source": "Knowledge",
-     "icon": "brain",
-     "route": "/knowledge?selectedId=k1",
-     "why": "notes for the same trip"
-    },
-    {
-     "id": "s1-1",
-     "key": "mail:m77",
-     "what": "Maya Chen — Austin — hotel confirmation",
-     "source": "Mail",
-     "icon": "envelope",
-     "route": "/inbox?selectedId=m77",
-     "why": "the hotel for it"
-    }
-   ],
+   "sweep_note": "",
+   "found": [],
    "rows": [
     {
      "id": "s1-mm1",
@@ -360,14 +200,42 @@
      "last": "1"
     }
    ]
+  },
+  {
+   "id": "backlog",
+   "title": "Backlog",
+   "state": "One chore, five months old.",
+   "tint": "blue",
+   "icon": "checklist",
+   "note": "1 item",
+   "count": "1",
+   "real": "",
+   "sweeping": "",
+   "sweep_note": "",
+   "found": [],
+   "rows": [
+    {
+     "id": "backlog-tr2",
+     "kind": "task",
+     "icon": "checkmark.circle",
+     "tint": "orange",
+     "what": "Fix light switch",
+     "when": "5 months",
+     "late": "",
+     "route": "/reminders",
+     "dim": "",
+     "iid": "tr2",
+     "last": "1"
+    }
+   ]
   }
  ],
- "all_note": "15 items",
+ "all_note": "6 items",
  "brief": {
   "focus": [
    {
     "id": "f0",
-    "text": "Answer Maya — she has asked twice and you fly tomorrow."
+    "text": "Auto loan payment is past due — pay it."
    }
   ],
   "next": [

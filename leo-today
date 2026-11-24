@@ -453,30 +453,6 @@ def notes(now, act):
     return out
 
 
-NOREPLY = re.compile(r"no[-_.]?reply|do[-_.]?not[-_.]?reply|notification|mailer|bounce", re.I)
-# Bulk senders: the ESP subdomains blasts go out from, and the mailbox names
-# nobody is sitting behind.
-BULK_ADDR = re.compile(r"@(?:email\d*|e|mail\d*|em|news|mkt|marketing|info|cs)\.|"
-                       r"^(?:news|newsletter|promo|offers|deals|marketing|updates|hello|team)@", re.I)
-# …and what a blast is about. A page about what is waiting on YOU has no
-# business carrying an advertisement, and — the reason this matters more than
-# tidiness — a marketing subject is a bag of common nouns, which is exactly
-# what makes a false subject: "Black Friday SALES" and "Weekly SALES Meeting"
-# share a word and nothing else.
-BLAST = re.compile(r"\b(black friday|cyber monday|% off|\d+% |deals?|sale|save big|"
-                   r"limited time|act now|unsubscribe|webinar|newsletter|coupon|"
-                   r"info enclosed|special offer|exclusive|you(?:'re| are) invited|"
-                   r"don'?t miss|last chance|ends (?:today|soon)|free trial|"
-                   r"refinanc|home equity|pre-?approved|rates? (?:are|have)|"
-                   r"lowest price|best price|price drop|clearance|flash)s?\b", re.I)
-# A machine telling you where a parcel is is not a person waiting on you.
-# This is its own pattern rather than more BLAST entries because it is a
-# different KIND of thing — transactional, not promotional — and lumping
-# them together is how the next reader mis-tunes one by editing the other.
-RECEIPT = re.compile(r"\b(tracking (?:added|number|update)|your order|order (?:#|confirm|ship|"
-                     r"placed|update)|has shipped|out for delivery|delivered|receipt|"
-                     r"invoice|statement (?:is|available)|payment (?:received|confirm)|"
-                     r"shipping confirmation|we'?ve received)\b", re.I)
 FROM = re.compile(r'^\s*"?(?P<name>[^"<]{1,60}?)"?\s*<(?P<addr>[^>]+)>\s*$')
 
 
@@ -490,40 +466,39 @@ def sender(raw):
     return (raw.split("@")[0] or raw), raw
 
 
+JUNK = re.compile(r"[\u034f\u200b-\u200f\u2060\ufeff\u00ad\u200c\u00a0]+|&#\d+;|&[a-z]+;")
+
+
 def mail(now, act):
-    """What is waiting on a reply.
+    """The inbox, as it is: who, the subject, and what the message SAYS.
 
-    The inbox tool answers JSON — a list of messages with `from`, `subject`
-    and `is_read`. It is read as JSON first and only parsed as prose if that
-    fails, because a tool that changes its mind about which it speaks should
-    cost this page a block, not fill it with fragments of the other one: a
-    `"date":` line once reached the screen as a person's name.
+    This used to decide what mattered by who sent it — drop no-reply, drop
+    bulk subdomains, drop any subject saying "invoice" or "tracking" — on the
+    stated ground that "a machine is not waiting on you". Measured against
+    one real day, 34 messages: it showed ONE. It deleted the bank's "your
+    auto loan payment is past due", two "your build has issues" notices, a
+    fee invoice and three shipments — and the one it kept, from a
+    human-looking address, was a vendor's sales follow-up, which the page
+    then called "Katie is waiting for your answer" all evening.
 
-    A machine is not waiting on you. Anything from a no-reply address is
-    dropped, which is most of an inbox and all of its noise.
+    Who sent it settles nothing in either direction. So nothing is filtered
+    here: every message goes to the model with its snippet, and IT decides
+    what is a promotion. What it has not judged yet is never drawn.
     """
-    out_text = tool("email", {"action": "list_inbox", "limit": 25}, act)
-    try:
-        raw = json.loads(out_text)
-    except Exception:  # noqa: BLE001
-        raw = None
-    out = []
-    if isinstance(raw, list):
+    out, seen = [], set()
+    for offset in (0, 50):
+        raw = json.loads(tool("email", {"action": "list_inbox", "limit": 50, "offset": offset}, act))
+        if not isinstance(raw, list) or not raw:
+            break
         for m in raw:
-            if not isinstance(m, dict):
+            if not isinstance(m, dict) or not m.get("id") or m["id"] in seen:
                 continue
+            seen.add(m["id"])
             who, addr = sender(m.get("from"))
-            if NOREPLY.search(addr) or NOREPLY.search(who) or BULK_ADDR.search(addr):
-                continue
-            subj = str(m.get("subject") or "").strip()
-            if not subj or BLAST.search(subj) or RECEIPT.search(subj):
-                continue
-            out.append({"id": f"m{m.get('id', len(out))}", "who": who[:40],
-                        "subject": subj[:90], "unread": not m.get("is_read")})
-            if len(out) >= 10:
-                break
-        # Unread first: those are the ones that are actually waiting.
-        out.sort(key=lambda m: not m["unread"])
+            snippet = " ".join(JUNK.sub(" ", str(m.get("snippet") or "")).split())[:150]
+            out.append({"id": f"m{m['id']}", "who": who[:40], "addr": addr[:60],
+                        "subject": str(m.get("subject") or "(no subject)").strip()[:90],
+                        "snippet": snippet, "unread": not m.get("is_read")})
     return out
 
 
@@ -639,38 +614,65 @@ Each block below is a SEPARATE subject. Never join facts from two blocks
 into one sentence.
 """
 
-ORGANISE_SYSTEM = """You organise one person's day, inside their own assistant.
+ORGANISE_SYSTEM = """You keep one person's day in order, inside their own assistant, so
+they never have to open their mail, calendar, reminders and the rest to know
+where they stand. Think the way THEY hold their life in their head.
 
-They do not want to open five apps, and they do not want the page to move
-under them. So the subjects they already have are FIXED: you never rename,
-merge, reorder or empty one, and you never move an item that is already in
-one. Your work is only what is new, and the words.
+A person does not carry categories. Nobody thinks "Work: 6 items". They carry
+OPEN LOOPS — small stories in motion: someone they care about going through
+something, a project under way, a bill that is late, a release that is
+broken, a package on its way, a call tomorrow. Each is about one specific
+thing, has a state, and has a next move that is somebody's.
+
+Their existing subjects are FIXED: never rename, merge, reorder or empty one,
+never move an item already in one. You decide only where NEW items go, and
+you write the words.
 
 Answer ONLY with JSON:
 
 {"focus": ["..."], "next": ["..."],
- "place": [{"id": "...", "into": "s3"}, {"id": "...", "new": "Title"}],
+ "place": [{"id": "...", "into": "s3"}, {"id": "...", "new": "Title"},
+           {"id": "...", "to": "noise"}],
  "states": {"s3": "...", "Title": "..."}}
 
-- place: one entry for EVERY id under NEW ITEMS, and for nothing else.
-    into: the id of an existing subject it belongs with — prefer this.
-    new:  a title for a new subject, four words at most, the person's own
-          noun for it; never a source name ("Email", "Calendar"). Give the
-          same title to new items that belong together. When items are not
-          about one specific thing, use the part of life they belong to
-          ("Work", "Family", "Around the house", "Leo hub") — a subject of
-          one item is a failure unless it truly stands alone and matters.
-          Aim for three to five subjects in all.
-- states: for every subject, existing (by id) and new (by title), where it
-  stands in one line of fourteen words at most.
-- focus: what needs them now — at most three lines, twelve words each. A
-  person waiting beats a deadline beats a chore.
-- next: what is coming up in the next day or so — at most three lines,
-  twelve words each, each with its time or day.
+place — exactly one entry for EVERY id under NEW ITEMS:
+  into        an existing subject it is part of. Prefer this.
+  new         it opens a loop of its own. The title is how they would say it
+              aloud, four words at most: "Mike's surgery", "Auto loan past
+              due", "Leo Connect 1.4.0", "TCGplayer orders". NEVER a category
+              or a source ("Work", "Family", "Email", "Bills" on its own).
+              Give the same title to new items that are one story — the bank's
+              notice, the reminder and the invoice about the same debt belong
+              together whatever app they came from. A subject of ONE item is
+              right when that item is a real thing on their mind.
+  to: backlog     a chore or to-do that has sat for weeks with no deadline
+                  biting. Not a story; a pile.
+  to: background  true but not on their mind: a routine meeting, a receipt
+                  for something finished, a fact, a "completed" notice.
+  to: noise       promotions, sales, coupons, newsletters, brand marketing,
+                  "we miss you", pre-approvals and credit offers, donation
+                  drives, social digests, rate-your-purchase requests, and a
+                  salesperson following up on a quote. They never want to see
+                  these. When unsure whether mail is marketing, it is.
 
-"LATE" means already overdue by the time shown — never "due in". An item
-marked (finished) is over. An all-day item has no clock. Never invent a fact.
-No filler: "needs attention" and "worth monitoring" say nothing.
+MAIL: judge by what the message SAYS, never by who sent it. Automated mail is
+often the most important kind — a payment past due, a bill or invoice to pay,
+a build or deploy that failed, a security alert, a shipment of something they
+ordered, an appointment. And mail from a human-looking address is often a
+sales pitch.
+
+states — for every subject that has items, existing (by id) and new (by
+title): where it stands and whose move it is, fourteen words at most. It must
+add something the title does not say.
+
+focus — what needs them now, at most three lines of twelve words, most
+important first. Overdue money and a person waiting beat everything.
+next — what is coming in the next day or so, at most three lines of twelve
+words, each with its time or day.
+
+"LATE" means already overdue by the time shown — never "due in". (finished)
+means over. An all-day item has no clock. Never invent a fact. No filler:
+"needs attention" and "worth monitoring" say nothing.
 """
 
 
@@ -791,41 +793,56 @@ def load_subjects(user):
     try:
         st = json.load(open(subjects_path(user)))
         subs = [x for x in st.get("subjects") or [] if x.get("sid") and x.get("title")]
-        return {"seq": int(st.get("seq") or len(subs)), "subjects": subs}
+        return {"seq": int(st.get("seq") or len(subs)), "subjects": subs,
+                "noise": list(st.get("noise") or []), "background": list(st.get("background") or [])}
     except Exception:  # noqa: BLE001 — nothing grouped yet
-        return {"seq": 0, "subjects": []}
+        return {"seq": 0, "subjects": [], "noise": [], "background": []}
 
 
 def apply_places(user, places, allowed):
-    """File the model's placements. It may add to a subject or open one; it
-    cannot move, rename or reorder. Returns {title-or-sid: sid}."""
+    """File the model's placements. It may add to a subject, open one, or set
+    an item aside; it cannot move, rename or reorder what is already filed.
+    Anything it was asked about and did not place goes to the background, so
+    the same item is never asked about twice. Returns ({name: sid}, shown?)."""
     st = load_subjects(user)
     by_sid = {x["sid"]: x for x in st["subjects"]}
     by_title = {x["title"].lower(): x for x in st["subjects"]}
-    taken = {i for x in st["subjects"] for i in x["ids"]}
+    taken = {i for x in st["subjects"] for i in x["ids"]} | set(st["noise"]) | set(st["background"])
     names = {x["sid"]: x["sid"] for x in st["subjects"]}
     names.update({x["title"]: x["sid"] for x in st["subjects"]})   # a state may name either
+    shown = False
     for pl in places:
         iid = str(pl.get("id") or "")
         if iid not in allowed or iid in taken:
             continue                       # invented, or already has a home
+        aside = str(pl.get("to") or "").lower()
+        if aside in ("noise", "background"):
+            st[aside].append(iid)
+            taken.add(iid)
+            continue
         home = by_sid.get(str(pl.get("into") or ""))
-        title = str(pl.get("new") or "").strip()[:40]
+        title = "Backlog" if aside == "backlog" else str(pl.get("new") or "").strip()[:40]
         if not home and title:
             home = by_title.get(title.lower())
             if not home:
                 st["seq"] += 1
-                home = {"sid": f"s{st['seq']}", "title": title, "ids": []}
-                st["subjects"].insert(0, home)   # new news goes on top; nothing else moves
+                home = {"sid": "backlog" if aside == "backlog" else f"s{st['seq']}",
+                        "title": title, "ids": []}
+                # New news goes on top and nothing else moves; the backlog is
+                # the one thing that belongs at the bottom, and stays there.
+                st["subjects"].insert(len(st["subjects"]) if aside == "backlog" else 0, home)
                 by_sid[home["sid"]] = by_title[title.lower()] = home
             names[title] = home["sid"]
         if home:
             home["ids"].append(iid)
             taken.add(iid)
+            shown = True
+    st["background"] += [i for i in allowed if i not in taken]
     for x in st["subjects"]:
         x["ids"] = x["ids"][-200:]
+    st["noise"], st["background"] = st["noise"][-2000:], st["background"][-2000:]
     json.dump(st, open(subjects_path(user), "w"))
-    return names
+    return names, shown
 
 
 def edit_subjects(user, fn):
@@ -968,48 +985,41 @@ def sweep(user, sid, act):
         nudge()
 
 
-def write_brief(user, key, context, new_ids=()):
-    """Ask for the summary, and a home for what is new. OFF the request path."""
+def write_brief(user, key, context, new_ids=(), rekey=None):
+    """Ask where the new things go, and for the words. OFF the request path."""
     try:
         system = ORGANISE_SYSTEM
         told = fixes(user)
         if told:
             system += ("\nTHIS PERSON'S STANDING RULES. They OVERRIDE your own "
                        "judgment:\n" + "\n".join(f"- {f['text']}" for f in told) + "\n")
-
-        def asked(turns):
-            text = ask_claude(system, turns, work="periodic_check", max_tokens=1100).strip()
-            return text, json.loads(text[text.index("{"):text.rindex("}") + 1])
-
-        turns = [{"role": "user", "content": context}]
-        text, data = asked(turns)
-        # MEASURED on the owner's real day: asked for three to five subjects,
-        # the model returned six with five holding one item. Shown its own
-        # answer and the count, it merges. One retry, then accept.
-        fresh = [str(pl.get("new") or "").strip().lower() for pl in (data.get("place") or [])
-                 if isinstance(pl, dict) and pl.get("new")]
-        solo = [t for t in set(fresh) if fresh.count(t) == 1]
-        if len(solo) > 1:
-            try:
-                text, data = asked(turns + [
-                    {"role": "assistant", "content": text},
-                    {"role": "user", "content":
-                        f"{len(solo)} of your new subjects hold a single item. That is a list "
-                        "with headings, not a picture. Merge the new ones into at most four, by "
-                        "the part of life they belong to, or place them in existing subjects. "
-                        "Answer with the full JSON again."}])
-            except Exception as e:  # noqa: BLE001 — keep the first answer
-                print(f"today: regroup failed, keeping the first: {type(e).__name__}", flush=True)
+        text = ask_claude(system, [{"role": "user", "content": context}],
+                          work="periodic_check", max_tokens=2400).strip()
+        data = json.loads(text[text.index("{"):text.rindex("}") + 1])
         lines = lambda v: [str(x).strip()[:120] for x in (v or []) if str(x).strip()][:3]  # noqa: E731
         with _regen_lock:
-            names = apply_places(user, [pl for pl in (data.get("place") or []) if isinstance(pl, dict)],
-                                 set(new_ids))
-            states = {names.get(str(k), str(k)): str(v).strip()[:140]
-                      for k, v in (data.get("states") or {}).items()}
-            json.dump({"digest": key, "focus": lines(data.get("focus")),
-                       "next": lines(data.get("next")), "states": states,
-                       "at": datetime.now().isoformat(timespec="minutes")},
-                      open(brief_path(user), "w"))
+            names, shown = apply_places(
+                user, [pl for pl in (data.get("place") or []) if isinstance(pl, dict)], set(new_ids))
+            try:
+                old = json.load(open(brief_path(user)))
+            except Exception:  # noqa: BLE001
+                old = None
+            states = dict((old or {}).get("states") or {})
+            states.update({names.get(str(k), str(k)): str(v).strip()[:140]
+                           for k, v in (data.get("states") or {}).items() if str(v).strip()})
+            visible = {i for x in load_subjects(user)["subjects"] for i in x["ids"]}
+            filed = {"digest": rekey(visible) if rekey else key, "states": states,
+                     "focus": lines(data.get("focus")), "next": lines(data.get("next")),
+                     "at": datetime.now().isoformat(timespec="minutes")}
+            # Twenty promotions a day arrive, each one "new". If filing one as
+            # noise also rewrote the summary, the words at the top of the page
+            # would change twenty times a day for nothing. When nothing new
+            # reached the page and the day itself has not moved, the summary
+            # is left exactly as it was.
+            if old and new_ids and not shown and old.get("digest") == filed["digest"]:
+                filed.update(focus=old.get("focus") or [], next=old.get("next") or [],
+                             states=old.get("states") or {}, at=old.get("at"))
+            json.dump(filed, open(brief_path(user), "w"))
     except Exception as e:  # noqa: BLE001 — costs the words, not the page
         print(f"today: organising failed: {type(e).__name__}: {e}", flush=True)
     finally:
@@ -1203,9 +1213,9 @@ def ui_action(name, args, user, grant=None):
     return {"ok": False, "error": f"no such action: {name}"}
 
 
-def organised(user, has_items, key, context, now, new_ids=()):
-    """The filed summary, and a rewrite behind the page when the day has
-    moved. Served stale meanwhile — it never blanks."""
+def organised(user, key, context, now, new_ids=(), rekey=None):
+    """The filed summary, and a pass behind the page when there is something
+    new to file or the day has moved. Served stale meanwhile — never blank."""
     try:
         held = json.load(open(brief_path(user)))
         if not isinstance(held.get("states"), dict):
@@ -1213,12 +1223,13 @@ def organised(user, has_items, key, context, now, new_ids=()):
     except Exception:  # noqa: BLE001
         held = None
     stale = bool(held) and held.get("digest") != key
-    if has_items and (not held or stale):
+    if new_ids or not held or stale:
+        job = (user, key + ":" + str(len(new_ids)))
         with _regen_lock:
-            if (user, key) not in _regen:
+            if not any(u == user for u, _k in _regen):
                 _regen.add((user, key))
                 threading.Thread(target=write_brief, daemon=True,
-                                 args=(user, key, context, tuple(new_ids))).start()
+                                 args=(user, key, context, tuple(new_ids), rekey)).start()
     if held:
         written = when(held.get("at"))
         mins = int((now - written).total_seconds() // 60) if written else 0
@@ -1664,9 +1675,11 @@ def payload(grant=None, user=""):
         things.append({"id": iid, "kind": kind, "icon": icon, "tint": tint, "what": what[:110],
                        "when": when_, "late": late, "route": route, "dim": dim})
 
+    said = {}
     for m in mls:
         thing(m["id"], "mail", "envelope", "blue", f"{m['who']} — {m['subject']}",
               "unread" if m["unread"] else "", route=f"/inbox?selectedId={m['id'][1:]}")
+        said[m["id"]] = f"from {m['addr']}: {m['snippet']}"
     for e in evs:
         over = (not e["allday"]) and e["at"] + timedelta(minutes=e["mins"]) < now
         day = "" if e["at"].date() == now.date() else e["at"].strftime("%a ")
@@ -1695,7 +1708,10 @@ def payload(grant=None, user=""):
         thing("spend", "hub", "cpu", got["spend"]["tint"],
               f"{got['spend']['amount']} on models this month", got["spend"]["note"],
               route="/p/costs/spend")
-    count = lambda k: sum(1 for x in things if x["kind"] == k and x["id"] not in hidden and not x["dim"])  # noqa: E731
+    _rec = load_subjects(user)
+    _on = {i for sub_ in _rec["subjects"] for i in sub_["ids"]}
+    count = lambda k: sum(1 for x in things if x["kind"] == k and x["id"] not in hidden  # noqa: E731
+                          and not x["dim"] and (k != "mail" or x["id"] in _on))
     d["tiles"] = [
         {"id": "mail", "label": "Mail", "n": str(count("mail")), "icon": "envelope", "tint": "blue", "route": "/inbox"},
         {"id": "cal", "label": "Events", "n": str(count("event")), "icon": "calendar", "tint": "purple", "route": "/calendar"},
@@ -1730,16 +1746,21 @@ def payload(grant=None, user=""):
     record = load_subjects(user)
     by_id = {x["id"]: x for x in things}
     homed = {i for sub_ in record["subjects"] for i in sub_["ids"]}
-    fresh = [x for x in things if x["id"] not in homed]
+    aside = set(record["noise"]) | set(record["background"])
+    # Not on anyone's mind, and no model needed to say so: a meeting that is
+    # over, and facts that only inform. They feed the summary as context.
+    quiet = lambda x: (x["kind"] == "event" and x["dim"]) or x["kind"] in ("people", "money") or x["id"] == "spend"  # noqa: E731
+    fresh = [x for x in things if x["id"] not in homed and x["id"] not in aside and not quiet(x)]
     line = lambda x: (f"{x['id']} | {x['kind']} | {x['what']} | {x['when'] or '-'}"   # noqa: E731
                       + (" | LATE (overdue by this long)" if x["late"] else "")
-                      + (" | (finished)" if x["dim"] else ""))
-    # What the summary is ABOUT. Deliberately not everything: where a phone
-    # is and what the meter reads change by the minute, and a digest that
-    # moved with them rewrote the page every time somebody crossed a street.
-    steady = [{"id": x["id"], "kind": x["kind"], "late": x["late"]} for x in things
-              if x["kind"] not in ("people", "money", "event") and x["id"] != "spend"]
-    extras = []
+                      + (" | (finished)" if x["dim"] else "")
+                      + (f" | {said[x['id']]}" if x["id"] in said else ""))
+    steady = [{"id": x["id"], "kind": x["kind"], "late": x["late"]} for x in things if not quiet(x)]
+    # What the summary is ABOUT: only what is on the page. Not the promotion
+    # that arrived a minute ago, not where a phone is — so filing one, or
+    # somebody crossing a street, does not rewrite the words at the top.
+    rekey = lambda visible: digest_of([i for i in steady if i["id"] in visible], evs)   # noqa: E731
+    extras = [f"ALSO TRUE: {x['what']} ({x['when']})" for x in things if quiet(x) and x["kind"] != "event"]
     if got.get("weather"):
         w = got["weather"]
         extras.append(f"WEATHER: {w['temp']}, {w['range']}.")
@@ -1750,20 +1771,19 @@ def payload(grant=None, user=""):
                          + "\n".join("    " + line(by_id[i]) for i in sub_["ids"] if i in by_id)
                          for sub_ in record["subjects"]
                          if any(i in by_id for i in sub_["ids"])) or "(none yet)")
-           + "\n\nNEW ITEMS — place every one (`id | source | what | when`):\n"
-           + ("\n".join(line(x) for x in fresh) or "(none)")
+           + "\n\nNEW ITEMS — place every one (`id | source | what | when | detail`):\n"
+           + ("\n".join(line(x) for x in fresh[:120]) or "(none)")
            + "\n\n" + context_for([], evs, now, extras))
     try:
         open(ask_path(user, "ctx"), "w").write(ctx)   # Ask answers from the same facts
-    except Exception as e:  # noqa: BLE001 — Ask degrades, the page does not
+        json.dump({x["id"]: x["what"] for x in things}, open(ask_path(user, "things"), "w"))
+    except Exception as e:  # noqa: BLE001 — Ask and the sweep degrade, the page does not
         print(f"today: could not file the context: {type(e).__name__}", flush=True)
 
-    try:
-        json.dump({x["id"]: x["what"] for x in things}, open(ask_path(user, "things"), "w"))
-    except Exception:  # noqa: BLE001 — the sweep reads this; the page does not
-        pass
-    held = organised(user, bool(things), digest_of(steady, evs), ctx, now,
-                     [x["id"] for x in fresh])
+    held = organised(user, rekey(homed), ctx, now, [x["id"] for x in fresh[:120]], rekey)
+    # Mail is never drawn before it has been judged. Everything else that is
+    # new can wait on the page under "New"; a promotion cannot be allowed to.
+    fresh = [x for x in fresh if x["kind"] != "mail"]
 
     # ---- subjects: read from the record, in the record's order -------------
     states = (held or {}).get("states") or {}
@@ -1783,7 +1803,7 @@ def payload(grant=None, user=""):
                               "state": states.get(sub_["sid"], ""),
                               "tint": hue(sub_["sid"]), "icon": SUBJECT_ICON.get(lead_, "square.stack"),
                               "note": plural(len(members), "item"), "count": str(len(members)),
-                              "real": "1", "sweeping": "1" if sub_["sid"] in running else "",
+                              "real": "" if sub_["sid"] == "backlog" else "1", "sweeping": "1" if sub_["sid"] in running else "",
                               "sweep_note": "" if sub_["sid"] in running
                                             else (sub_.get("sweep") or {}).get("note", ""),
                               "found": [dict(f, id=f"{sub_['sid']}-{n}") for n, f in
@@ -1798,7 +1818,7 @@ def payload(grant=None, user=""):
         sub_["rows"] = mark_last([dict(x, id=f"{sub_['id']}-{x['id']}", iid=x["id"]) for x in sub_["rows"]])
     if subjects_:
         d["subjects"] = subjects_
-        d["all_note"] = plural(len(things), "item")
+        d["all_note"] = plural(sum(len(x["rows"]) for x in subjects_), "item")
     elif not gaps:
         d["zero"] = "1"
 

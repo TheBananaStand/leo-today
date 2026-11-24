@@ -38,8 +38,13 @@ REM = {"items": [
 FEED = {"items": [{"id": "f1", "title": "Amex is running hot", "chat_summary": "$2,341 this week.",
                    "created_at": now.isoformat()}]}
 INBOX = [{"from": "Maya Chen <maya@acme.com>", "subject": "Austin itinerary — need your dates",
-          "is_read": False, "id": "m1"},
-         {"from": "Newegg <news@email1.newegg.com>", "subject": "Black Friday Sales", "is_read": False, "id": "m2"}]
+          "snippet": "Can you confirm which days you are in town?", "is_read": False, "id": "m1"},
+         {"from": "Newegg <Promo@promo.newegg.com>", "subject": "Black Friday Sales",
+          "snippet": "Faster loads, smoother frames", "is_read": False, "id": "m2"},
+         {"from": "Wells Fargo <WF@mail17.wellsfargo.com>", "subject": "Your auto loan payment is past due",
+          "snippet": "For account ending in 2564", "is_read": True, "id": "m3"},
+         {"from": "katie@patiokitsdirect.com", "subject": "What Tools do you need?",
+          "snippet": "are you still interested in a Patio Cover Kit?", "is_read": False, "id": "m4"}]
 HOUSE = [{"available": True, "entity_id": "lock.front_door", "friendly_name": "Front Door", "state": "unlocked"}]
 
 m.acting = lambda g: "acting-token"
@@ -69,15 +74,18 @@ m.tool = lambda name, args, tok: (
     json.dumps({"total_spending": 2341.0,
                 "categories": [{"category_name": "Travel", "total": 980.0}]}) if name == "finance" else
     "Cloudy. 5° now, 2° / 7° today.")
-FIRST = {"focus": ["Answer Maya — she has asked twice and you fly tomorrow."],
+FIRST = {"focus": ["Auto loan payment is past due — pay it."],
          "next": ["Flight to Austin, tomorrow 08:00."],
          "place": [{"id": "mm1", "new": "Austin trip"}, {"id": "tr1", "new": "Austin trip"},
                    {"id": "tr3", "new": "Austin trip"}, {"id": "e4", "new": "austin trip"},
                    {"id": "ghost", "new": "Austin trip"},
-                   {"id": "tr2", "new": "Around the house"},
-                   {"id": "alert-x", "into": "s999"}],
+                   {"id": "mm3", "new": "Auto loan past due"},
+                   {"id": "mm2", "to": "noise"}, {"id": "mm4", "to": "noise"},
+                   {"id": "tr2", "to": "backlog"},
+                   {"id": "e2", "to": "background"}],
          "states": {"Austin trip": "Flying tomorrow; passport and dates still open.",
-                    "Around the house": "One chore, five months old."}}
+                    "Auto loan past due": "Wells Fargo says the payment is late.",
+                    "Backlog": "One chore, five months old."}}
 m.ask_claude = lambda *a, **k: json.dumps(FIRST)
 m.nudge = lambda: None
 
@@ -102,7 +110,18 @@ assert {r["iid"] for r in austin["rows"]} == {"mm1", "tr1", "tr3", "e4"}, \
 assert austin["state"].startswith("Flying tomorrow"), "a new subject's state is filed under its id"
 every = [r["iid"] for sub in subs for r in sub["rows"]]
 assert len(every) == len(set(every)), "an item is in two subjects"
-assert subs[0]["id"] == "new" and subs[0]["rows"], "what is not placed yet stays on the page, on top"
+# THE INBOX. Judged by what it says: the bank's notice came from a bulk
+# subdomain and is the most important thing here; the promotion and the
+# vendor's follow-up never reach the page, in any subject, under any name.
+assert [r["iid"] for r in named["Auto loan past due"]["rows"]] == ["mm3"], "the past-due notice must be a subject"
+assert "mm2" not in every and "mm4" not in every, "a promotion or a sales follow-up is on the page"
+assert not any("Newegg" in r["what"] or "patiokits" in r["what"].lower() for sub in subs for r in sub["rows"])
+assert subs[-1]["id"] == "backlog" and [r["iid"] for r in subs[-1]["rows"]] == ["tr2"], "the backlog sits last"
+assert subs[-1]["real"] == "", "a pile cannot be swept"
+assert "new" not in [x["id"] for x in subs], "once filed, nothing is left waiting — the unplaced went to the background"
+rec = m.load_subjects("selftest")
+assert {"mm2", "mm4"} <= set(rec["noise"]) and "e2" in rec["background"]
+assert next(t for t in d["tiles"] if t["id"] == "mail")["n"] == "2", "the Mail tile counts mail that MATTERS"
 ids = [r["id"] for sub in subs for r in sub["rows"]]
 assert len(ids) == len(set(ids)), "two rows share an element id"
 routes = {r["iid"]: r["route"] for sub in subs for r in sub["rows"]}
@@ -112,42 +131,70 @@ assert not d.get("gaps_line"), "every stubbed source should have answered"
 assert d["rail"] and d["now"]["title"] == "Flight to Austin" and d["rail"][0]["first"] == "1"
 assert m._scene.split("-")[1] == ("day" if 7 <= now.hour < 18 else "night"), m._scene
 
+# Mail is never drawn before it is judged: a message that has just arrived
+# and is still being filed must not appear under "New".
+m.ask_claude = lambda *a, **k: (time.sleep(0.4), json.dumps({"focus": [], "next": [], "place": [], "states": {}}))[1]
+INBOX.append({"from": "Deals <x@promo.shop.com>", "subject": "70% OFF EVERYTHING", "snippet": "", "is_read": False, "id": "m8"})
+peek = m.payload("grant", "selftest")
+assert not any(r["iid"] == "mm8" for sub in peek["subjects"] for r in sub["rows"]), "unjudged mail reached the page"
+time.sleep(0.8); INBOX.pop()
+
 # --- THE PAGE HOLDS STILL ---------------------------------------------------
 # The complaint this exists for: "the data keeps shuffling". A subject keeps
 # its id, title, colour and place; an item stays where it was put; the model
 # is asked only about what is new, and cannot move the rest even if it tries.
 shape = lambda d: [(x["id"], x["title"], x["tint"], [r["iid"] for r in x["rows"]])  # noqa: E731
                    for x in d["subjects"] if x["id"] != "new"]
+d = m.payload("grant", "selftest")
 before = shape(d)
+words_before = [f["text"] for f in d["brief"]["focus"]]
 asked_for = {}
-def _second(system, turns, **k):
+def _noise(system, turns, **k):
     asked_for["ctx"] = turns[0]["content"]
-    return json.dumps({"focus": ["Different words this time."], "next": [],
-                       "place": [{"id": "mm9", "into": austin["id"]},
+    return json.dumps({"focus": ["DIFFERENT WORDS"], "next": [], "states": {},
+                       "place": [{"id": "mm9", "to": "noise"},
                                  {"id": "tr2", "new": "Somewhere else entirely"},      # already homed
-                                 {"id": "tr1", "into": "s999"}],                       # already homed
-                       "states": {austin["id"]: "Now with a new message."}})
-m.ask_claude = _second
-INBOX.append({"from": "Maya Chen <maya@acme.com>", "subject": "Austin — hotel?", "is_read": False, "id": "m9"})
-LOCS["data"][0]["address"] = "99 Elm Rd, Austin"            # a phone moved: must NOT cause a rewrite
-key_before = json.load(open(m.brief_path("selftest")))["digest"]
-LOCS_ONLY = m.payload("grant", "selftest")
+                                 {"id": "tr1", "into": "s999"}]})                      # already homed
+m.ask_claude = _noise
+INBOX.append({"from": "Shop <x@promo.shop.com>", "subject": "Cyber Monday", "snippet": "", "is_read": False, "id": "m9"})
+LOCS["data"][0]["address"] = "99 Elm Rd, Austin"            # a phone moved
 for _ in range(100):
     d = m.payload("grant", "selftest")
-    if d["brief"]["focus"][0]["text"].startswith("Different"):
+    if "mm9" in m.load_subjects("selftest")["noise"]:
+        break
+    time.sleep(0.05)
+time.sleep(0.2); d = m.payload("grant", "selftest")
+new_ctx = asked_for["ctx"].split("NEW ITEMS", 1)[1].split("TODAY'S CALENDAR", 1)[0]
+assert "mm9" in new_ctx and "tr1 |" not in new_ctx, "the model must be asked about the new item ONLY"
+assert shape(d) == before, "a promotion arriving (or a phone moving) changed the page"
+assert [f["text"] for f in d["brief"]["focus"]] == words_before, \
+    "filing a promotion as noise rewrote the summary at the top of the page"
+calls = []
+m.ask_claude = lambda *a, **k: calls.append(1) or json.dumps({"focus": [], "next": [], "place": [], "states": {}})
+m.payload("grant", "selftest"); time.sleep(0.3); m.payload("grant", "selftest"); time.sleep(0.2)
+assert not calls, f"nothing is new and nothing moved, yet the model was called {len(calls)}x"
+
+def _real(system, turns, **k):
+    return json.dumps({"focus": ["Now two things from Maya."], "next": [], "place": [{"id": "mm7", "into": austin["id"]}],
+                       "states": {austin["id"]: "Now with a new message."}})
+m.ask_claude = _real
+INBOX.append({"from": "Maya Chen <maya@acme.com>", "subject": "Austin — hotel?", "snippet": "", "is_read": False, "id": "m7"})
+for _ in range(100):
+    d = m.payload("grant", "selftest")
+    if d["brief"]["focus"] and d["brief"]["focus"][0]["text"].startswith("Now two"):
         break
     time.sleep(0.05)
 after = shape(d)
-new_ctx = asked_for["ctx"].split("NEW ITEMS", 1)[1].split("TODAY'S CALENDAR", 1)[0]
-assert "mm9" in new_ctx and "tr1 |" not in new_ctx, "the model must be asked about the new item ONLY"
 for (sid, title, tint, members), (sid2, title2, tint2, members2) in zip(before, after):
     assert (sid, title, tint) == (sid2, title2, tint2), f"a subject changed identity: {title} -> {title2}"
     assert members2[:len(members)] == members, f"{title}: its rows moved"
 assert len(after) == len(before), "a subject appeared or vanished"
-assert "mm9" in dict((t, m_) for _, t, _, m_ in after)["Austin trip"], "the new message was not filed where it belongs"
-print("stable       : same subjects, same order, same colours, same rows — one new row added to one")
-INBOX.pop()
-d = m.payload("grant", "selftest")
+assert "mm7" in dict((t, m_) for _, t, _, m_ in after)["Austin trip"], "the new message was not filed where it belongs"
+print("inbox        : the past-due notice is a subject; the promotion and the sales follow-up never appear")
+print("stable       : same subjects, order, colours, rows — a promotion changes nothing, not even the summary")
+INBOX.pop(); INBOX.pop()
+m.ask_claude = lambda *a, **k: json.dumps({"focus": ["f"], "next": [], "place": [], "states": {}})
+time.sleep(0.2); d = m.payload("grant", "selftest"); time.sleep(0.3); d = m.payload("grant", "selftest")
 
 # --- rename, and the sweep ----------------------------------------------------
 sid = austin["id"]
@@ -156,7 +203,7 @@ assert m.ui_action("rename", {"id": sid, "title": "Austin, Thursday"}, "selftest
 d = m.payload("grant", "selftest")
 renamed = next(x for x in d["subjects"] if x["id"] == sid)
 assert renamed["title"] == "Austin, Thursday" and renamed["tint"] == austin["tint"], "a rename must not recolour or move"
-assert [x["id"] for x in d["subjects"] if x["id"] != "new"] == [x[0] for x in after], "a rename reordered the page"
+assert [x["id"] for x in d["subjects"]] == [x[0] for x in after], "a rename reordered the page"
 
 BASE_TOOL = m.tool
 def run_sweep(plan, verdict, results):
@@ -304,22 +351,6 @@ m.write_brief("selftest", "k", "CONTEXT")
 assert "STANDING RULES" in seen["system"] and "all-day thing" in seen["system"], "rules never reached the organiser"
 assert seen["system"].rindex("STANDING RULES") > seen["system"].index("Never invent"), "rules must come LAST"
 print("rules        :", len(told), "standing, and they reach the organiser")
-# A model that opens one-item subjects is sent back ONCE, with its own answer.
-calls = []
-def _lazy(system, turns, **k):
-    calls.append(len(turns))
-    if len(turns) == 1:
-        return json.dumps({"focus": ["f"], "next": [], "states": {},
-                           "place": [{"id": "zz1", "new": "A"}, {"id": "zz2", "new": "B"}]})
-    return json.dumps({"focus": ["f"], "next": [], "states": {},
-                       "place": [{"id": "zz1", "new": "Chores"}, {"id": "zz2", "new": "Chores"}]})
-m.ask_claude = _lazy
-m.write_brief("selftest", "k9", "CONTEXT", ("zz1", "zz2"))
-assert calls == [1, 3], f"expected one retry carrying the first answer, got turns {calls}"
-made = [x for x in m.load_subjects("selftest")["subjects"] if x["title"] in ("A", "B", "Chores")]
-assert [x["title"] for x in made] == ["Chores"] and made[0]["ids"] == ["zz1", "zz2"], made
-print("regroup      : one-item subjects are sent back once, and the merge is what is filed")
-
 rang = []
 m.nudge = lambda: rang.append(1)
 m.write_brief("selftest", "k3", "CONTEXT"); assert rang, "a ranking never nudged the open page"
