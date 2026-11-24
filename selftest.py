@@ -207,6 +207,22 @@ m.write_brief("selftest", "k", "CONTEXT")
 assert "STANDING RULES" in seen["system"] and "all-day thing" in seen["system"], "rules never reached the organiser"
 assert seen["system"].rindex("STANDING RULES") > seen["system"].index("Never invent"), "rules must come LAST"
 print("rules        :", len(told), "standing, and they reach the organiser")
+# A model that answers with one-item subjects is sent back ONCE, with its own
+# answer and the count in front of it.
+calls = []
+def _lazy(system, turns, **k):
+    calls.append(len(turns))
+    if len(turns) == 1:
+        return json.dumps({"focus": ["f"], "next": [], "subjects": [
+            {"title": "A", "state": "", "ids": ["tr1"]}, {"title": "B", "state": "", "ids": ["tr2"]}]})
+    return json.dumps({"focus": ["f"], "next": [], "subjects": [{"title": "Chores", "state": "", "ids": ["tr1", "tr2"]}]})
+m.ask_claude = _lazy
+m.write_brief("selftest", "k9", "CONTEXT")
+filed = json.load(open(m.brief_path("selftest")))
+assert calls == [1, 3], f"expected one retry carrying the first answer, got turns {calls}"
+assert [x["title"] for x in filed["subjects"]] == ["Chores"], filed["subjects"]
+print("regroup      : one-item subjects are sent back once, and the merge is what is filed")
+
 rang = []
 m.nudge = lambda: rang.append(1)
 m.write_brief("selftest", "k3", "CONTEXT"); assert rang, "a ranking never nudged the open page"

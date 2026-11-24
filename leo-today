@@ -783,10 +783,30 @@ def write_brief(user, key, context):
             # one more fact gets weighed against the facts and loses.
             system += ("\nTHIS PERSON'S STANDING RULES. They OVERRIDE your own "
                        "judgment:\n" + "\n".join(f"- {f['text']}" for f in told) + "\n")
-        answer = ask_claude(system, [{"role": "user", "content": context}],
-                            work="periodic_check", max_tokens=1100)
-        text = answer.strip()
-        data = json.loads(text[text.index("{"):text.rindex("}") + 1])
+        def asked(turns):
+            text = ask_claude(system, turns, work="periodic_check", max_tokens=1100).strip()
+            return text, json.loads(text[text.index("{"):text.rindex("}") + 1])
+
+        turns = [{"role": "user", "content": context}]
+        text, data = asked(turns)
+        # MEASURED on the owner's real day: told "three to five subjects, a
+        # subject of one item is a failure", the model returned six, five of
+        # them holding one item — so title, state and row said the same thing
+        # three times. Being told once in the prompt is not enough; being
+        # shown its own answer and the count is. One retry, then accept.
+        solo = [x for x in (data.get("subjects") or [])
+                if isinstance(x, dict) and len(x.get("ids") or []) == 1]
+        if len(solo) > 1:
+            try:
+                text, data = asked(turns + [
+                    {"role": "assistant", "content": text},
+                    {"role": "user", "content":
+                        f"{len(solo)} of your subjects hold a single item. That is a list "
+                        "with headings, not a picture. Merge them into at most four subjects "
+                        "by the part of life they belong to — work, family and people, the "
+                        "house, money — keeping every id. Answer with the full JSON again."}])
+            except Exception as e:  # noqa: BLE001 — keep the first answer
+                print(f"today: regroup failed, keeping the first: {type(e).__name__}", flush=True)
         lines = lambda v: [str(x).strip()[:120] for x in (v or []) if str(x).strip()][:3]  # noqa: E731
         subjects_ = [{"title": str(x.get("title") or "").strip()[:40],
                       "state": str(x.get("state") or "").strip()[:140],
