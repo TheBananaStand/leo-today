@@ -71,21 +71,29 @@ descriptor = {
                 # model call to a thread and returns at once. The answer
                 # arrives by `nudge()`, on the same `today` topic `refreshOn`
                 # already listens to.
-                # MEASURED, not assumed: the hub resolves `{…}` in `path` and
-                # NOT in `body`. A first cut put the question in the body and
-                # the process received the literal string `{args.text}`, which
-                # the model then answered with "I don't see your question."
-                # Everything an action carries therefore goes in the query.
-                "ask": {"method": "POST",
-                        "path": "/api/packages/today/ui/action?name=ask&text={args.text}",
-                        "body": {}, "refresh": "reload"},
-                "clear": {"method": "POST",
-                          "path": "/api/packages/today/ui/action?name=clear",
-                          "body": {}, "refresh": "reload"},
+                # `packageAction` is the kind that reaches a package's own
+                # `ui_action` — `POST /leo/ui/action` for a hosted process.
+                # It is NOT a hand-written HTTP call: two were tried first and
+                # both are recorded here because the failures look like
+                # successes.
+                #
+                #   body-templated   the hub passes a declared `body` through
+                #                    VERBATIM, so the process was handed the
+                #                    literal string "{args.text}" and the
+                #                    model answered "I don't see your question"
+                #   query-templated  the hub strips the query when it proxies,
+                #                    and fills its own {"name","args"} body —
+                #                    which for a generic HTTP action is
+                #                    {"args":null,"name":""}
+                #
+                # Both returned 200. Neither did anything.
+                "ask": {"kind": "packageAction", "name": "ask",
+                        "args": {"text": "{args.text}"}, "refresh": "reload"},
+                "clear": {"kind": "packageAction", "name": "clear",
+                          "refresh": "reload"},
                 # Drop the cached briefing; the next draw rebuilds it.
-                "rewrite": {"method": "POST",
-                            "path": "/api/packages/today/ui/action?name=rewrite",
-                            "body": {}, "refresh": "reload"},
+                "rewrite": {"kind": "packageAction", "name": "rewrite",
+                            "refresh": "reload"},
                 # The way out of the "nothing answered" state, and the header's
                 # own refresh.
                 "refresh": {"method": "GET", "path": "/api/packages/today/ui/data",

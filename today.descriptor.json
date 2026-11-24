@@ -41,21 +41,21 @@
           "refresh": "reload"
         },
         "ask": {
-          "method": "POST",
-          "path": "/api/packages/today/ui/action?name=ask&text={args.text}",
-          "body": {},
+          "kind": "packageAction",
+          "name": "ask",
+          "args": {
+            "text": "{args.text}"
+          },
           "refresh": "reload"
         },
         "clear": {
-          "method": "POST",
-          "path": "/api/packages/today/ui/action?name=clear",
-          "body": {},
+          "kind": "packageAction",
+          "name": "clear",
           "refresh": "reload"
         },
         "rewrite": {
-          "method": "POST",
-          "path": "/api/packages/today/ui/action?name=rewrite",
-          "body": {},
+          "kind": "packageAction",
+          "name": "rewrite",
           "refresh": "reload"
         },
         "refresh": {
