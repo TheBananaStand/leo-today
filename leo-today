@@ -394,7 +394,16 @@ BLAST = re.compile(r"\b(black friday|cyber monday|% off|\d+% |deals?|sale|save b
                    r"limited time|act now|unsubscribe|webinar|newsletter|coupon|"
                    r"info enclosed|special offer|exclusive|you(?:'re| are) invited|"
                    r"don'?t miss|last chance|ends (?:today|soon)|free trial|"
-                   r"refinanc|home equity|pre-?approved|rates? (?:are|have))\b", re.I)
+                   r"refinanc|home equity|pre-?approved|rates? (?:are|have)|"
+                   r"lowest price|best price|price drop|clearance|flash)s?\b", re.I)
+# A machine telling you where a parcel is is not a person waiting on you.
+# This is its own pattern rather than more BLAST entries because it is a
+# different KIND of thing — transactional, not promotional — and lumping
+# them together is how the next reader mis-tunes one by editing the other.
+RECEIPT = re.compile(r"\b(tracking (?:added|number|update)|your order|order (?:#|confirm|ship|"
+                     r"placed|update)|has shipped|out for delivery|delivered|receipt|"
+                     r"invoice|statement (?:is|available)|payment (?:received|confirm)|"
+                     r"shipping confirmation|we'?ve received)\b", re.I)
 FROM = re.compile(r'^\s*"?(?P<name>[^"<]{1,60}?)"?\s*<(?P<addr>[^>]+)>\s*$')
 
 
@@ -434,7 +443,7 @@ def mail(now, act):
             if NOREPLY.search(addr) or NOREPLY.search(who) or BULK_ADDR.search(addr):
                 continue
             subj = str(m.get("subject") or "").strip()
-            if not subj or BLAST.search(subj):
+            if not subj or BLAST.search(subj) or RECEIPT.search(subj):
                 continue
             out.append({"id": f"m{m.get('id', len(out))}", "who": who[:40],
                         "subject": subj[:90], "unread": not m.get("is_read")})
