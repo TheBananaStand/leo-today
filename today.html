@@ -249,7 +249,7 @@
              because a standing instruction you cannot see or withdraw is
              worse than one that was never heard. -->
         <div if="$.fixing" id="fixing" class="flex flex-col gap-3 p-4 rounded-lg bg-elevated">
-          <form id="fix" action="correct" class="flex items-center gap-2">
+          <form id="fix" action="correct" args="text={$.form.fix}" class="flex items-center gap-2">
             <input id="fix-field" bind="form.fix" required autofocus
                    placeholder="What did it get wrong?"
                    class="flex-1 max-w-2xl h-10 min-w-0">
@@ -507,7 +507,7 @@
           <a each="s in suggestions" id="sg-{s.id}" action="ask" args="text={s.text}"
              class="min-h-10 px-3.5 flex items-center shrink-0 rounded-full text-sm font-medium bg-elevated">{s.text}</a>
         </div>
-        <form id="compose" action="ask" class="flex items-center gap-2 pt-4">
+        <form id="compose" action="ask" args="text={$.form.message}" class="flex items-center gap-2 pt-4">
           <input id="ask-field" bind="form.message" placeholder="Ask about today" shortcut="/" required
                  class="flex-1 max-w-2xl h-10 min-w-0">
           <button id="ask-send" action="ask" args="text={$.form.message}"
