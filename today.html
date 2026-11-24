@@ -396,7 +396,7 @@
                 <div grow="{spend.rest}" class="h-1.5"></div>
               </div>
               <!-- A bar with no scale is a shape, not a figure. -->
-              <div class="flex items-center justify-between gap-3">
+              <div if="spend.cap" class="flex items-center justify-between gap-3">
                 <span class="text-xs text-muted">{spend.scale}</span>
                 <span class="text-xs text-muted tabular-nums">{spend.cap}</span>
               </div>
