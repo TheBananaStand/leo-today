@@ -638,27 +638,33 @@ Each block below is a SEPARATE subject. Never join facts from two blocks
 into one sentence.
 """
 
-RANK_SYSTEM = """You triage one person's inbox, inside their own assistant.
+ORGANISE_SYSTEM = """You organise one person's day, inside their own assistant.
 
-You are given every item waiting on them — messages from people, things due,
-things wrong around them — each with an id, then their calendar for context.
-Decide the ORDER they should deal with them in. You do not write a summary
-and you do not restate the items; they can read them.
+You are given EVERYTHING their hub knows right now — messages, calendar,
+reminders, the house, the hub itself, money — one item per line, each with an
+id. They do not want to open five apps. Turn it into the bigger picture.
 
 Answer ONLY with JSON:
 
-{"order": [{"id": "...", "why": "..."}]}
+{"focus": ["..."], "next": ["..."],
+ "subjects": [{"title": "...", "state": "...", "ids": ["..."]}]}
 
-- order: up to six ids, most deserving first. Someone waiting on them beats
-  a deadline; a deadline beats a consequence; a consequence beats a chore
-  that has sat for months and can sit another day.
-- why: eight words at most on why it is THERE in the order — "she has asked
-  twice", "locks you out on Friday" — and only when the item does not already
-  say it. Otherwise "". Never "needs attention", never "worth a look".
-- Use only ids that appear below. Leave out anything you would not put in
-  the first six; it keeps its place underneath.
+- subjects: group the items by what they are ABOUT, across sources — a person,
+  a project, a trip, a bill, the house, work. A message, a reminder and a
+  meeting about the same thing belong together. Two to six subjects.
+    title: the person's own noun for it, four words at most. Never a source
+           name ("Email", "Calendar", "Reminders").
+    state: where it stands, in one line of fourteen words at most.
+    ids:   every id below goes in EXACTLY one subject. Drop none. Most
+           pressing first. Order the subjects most pressing first too.
+- focus: what needs them now — at most three lines, twelve words each, most
+  important first. A person waiting beats a deadline beats a chore.
+- next: what is coming up in the next day or so — at most three lines,
+  twelve words each, each with its time or day.
 
-Never invent a fact that is not below.
+An item marked (finished) is over: never say it is happening. An all-day item
+has no clock. Never invent a fact that is not below. No filler: "needs
+attention" and "worth monitoring" say nothing.
 """
 
 
@@ -762,37 +768,34 @@ def context_for(items, evs, now, extras):
 
 
 def write_brief(user, key, context):
-    """Ask for the ORDER of the inbox and file it. Runs OFF the request path.
-
-    The name is the old one. It wrote a headline, then a sentence; what it
-    writes now is a ranking, because the top row of an inbox IS the one
-    thing, and a model that orders real rows cannot restate them.
-    """
+    """Ask for the summary and the subjects, and file them. OFF the request path."""
     try:
-        system = RANK_SYSTEM
+        system = ORGANISE_SYSTEM
         told = fixes(user)
         if told:
             # Last, so it is the nearest thing to the request, and phrased as
             # a rule rather than as information — a correction that reads as
             # one more fact gets weighed against the facts and loses.
             system += ("\nTHIS PERSON'S STANDING RULES. They OVERRIDE your own "
-                       "judgment; an item a rule says is not for them goes "
-                       "LAST or is left out:\n"
-                       + "\n".join(f"- {f['text']}" for f in told) + "\n")
+                       "judgment:\n" + "\n".join(f"- {f['text']}" for f in told) + "\n")
         answer = ask_claude(system, [{"role": "user", "content": context}],
-                            work="periodic_check", max_tokens=500)
+                            work="periodic_check", max_tokens=1100)
         text = answer.strip()
         data = json.loads(text[text.index("{"):text.rindex("}") + 1])
-        order = [{"id": str(o.get("id")), "why": str(o.get("why") or "").strip()[:80]}
-                 for o in (data.get("order") or []) if isinstance(o, dict) and o.get("id")]
-        if not order:
-            raise ValueError("no order")
+        lines = lambda v: [str(x).strip()[:120] for x in (v or []) if str(x).strip()][:3]  # noqa: E731
+        subjects_ = [{"title": str(x.get("title") or "").strip()[:40],
+                      "state": str(x.get("state") or "").strip()[:140],
+                      "ids": [str(i) for i in (x.get("ids") or [])]}
+                     for x in (data.get("subjects") or []) if isinstance(x, dict) and x.get("title")]
+        if not subjects_ and not lines(data.get("focus")):
+            raise ValueError("neither subjects nor focus")
         with _regen_lock:
-            json.dump({"digest": key, "order": order[:8],
+            json.dump({"digest": key, "focus": lines(data.get("focus")),
+                       "next": lines(data.get("next")), "subjects": subjects_[:8],
                        "at": datetime.now().isoformat(timespec="minutes")},
                       open(brief_path(user), "w"))
-    except Exception as e:  # noqa: BLE001 — a ranking that fails costs an order
-        print(f"today: ranking failed: {type(e).__name__}: {e}", flush=True)
+    except Exception as e:  # noqa: BLE001 — costs the grouping, not the page
+        print(f"today: organising failed: {type(e).__name__}: {e}", flush=True)
     finally:
         with _regen_lock:
             _regen.discard((user, key))
@@ -941,25 +944,29 @@ def ui_action(name, args, user):
     return {"ok": False, "error": f"no such action: {name}"}
 
 
-def ranking(user, queue, key, context):
-    """The filed order, and a re-rank behind the page when the inbox moved.
-
-    Never blocks and never blanks: with no ranking, or a stale one, the queue
-    is drawn in its plain order and the model's arrives by `nudge()`.
-    """
+def organised(user, has_items, key, context, now):
+    """The filed summary and subjects, and a rewrite behind the page when the
+    day has moved. Served stale meanwhile — it never blanks."""
     try:
         held = json.load(open(brief_path(user)))
-        if not isinstance(held.get("order"), list):
+        if not isinstance(held.get("subjects"), list):
             held = None
     except Exception:  # noqa: BLE001
         held = None
-    if queue and (not held or held.get("digest") != key):
+    stale = bool(held) and held.get("digest") != key
+    if has_items and (not held or stale):
         with _regen_lock:
             if (user, key) not in _regen:
                 _regen.add((user, key))
                 threading.Thread(target=write_brief, daemon=True,
                                  args=(user, key, context)).start()
-    return (held or {}).get("order") or []
+    if held:
+        written = when(held.get("at"))
+        mins = int((now - written).total_seconds() // 60) if written else 0
+        held["age"] = ("just now" if mins < 2 else f"{mins} min ago" if mins < 90
+                       else f"{mins // 60}h ago" if mins < 24 * 60 else "yesterday")
+        held["stale"] = "1" if stale else ""
+    return held
 
 
 # ---------------------------------------------------------------------------
@@ -1153,6 +1160,21 @@ def subjects(items):
         if len(threads) >= 3:
             break
     return threads, used
+
+
+SUBJECT_ICON = {"mail": "envelope", "event": "calendar", "task": "checklist", "home": "house",
+                "hub": "server.rack", "note": "sparkles", "people": "person.2", "money": "creditcard"}
+_scene = "clear-day"
+
+
+def scene_for(condition, now):
+    """Which sky the hero draws: the weather's word, and whether it is dark."""
+    c = condition.lower()
+    kind = ("storm" if "thunder" in c or "storm" in c else "snow" if "snow" in c or "sleet" in c
+            else "rain" if "rain" in c or "drizzle" in c or "shower" in c
+            else "fog" if "fog" in c or "mist" in c or "haze" in c
+            else "cloud" if "cloud" in c or "overcast" in c else "clear")
+    return f"{kind}-{'day' if 7 <= now.hour < 18 else 'night'}"
 
 
 KIND_ICON = {"task": "checkmark.square", "mail": "envelope",
@@ -1359,12 +1381,8 @@ def payload(grant=None, user=""):
     d = {"loaded": "1",
          "greeting": greeting(now),
          "date_line": now.strftime("%-d %B · week %V"),
-         "keys": [{"id": "k1", "key": "j k", "does": "move"},
-                  {"id": "k2", "key": "e", "does": "done"},
-                  {"id": "k3", "key": "h", "does": "later"},
-                  {"id": "k4", "key": "x", "does": "not for me"},
-                  {"id": "k5", "key": "z", "does": "undo"},
-                  {"id": "k6", "key": "/", "does": "ask"}]}
+         "keys": [{"id": "k1", "key": "/", "does": "ask"},
+                  {"id": "k2", "key": "w", "does": "rules"}]}
 
     if gaps and len(gaps) + quiet == len(sources):
         d["nothing_worked"] = "1"
@@ -1375,119 +1393,132 @@ def payload(grant=None, user=""):
 
     if got.get("weather"):
         d["weather"] = got["weather"]
-    # One list. Money and the model bill were two cards of their own, the
-    # second with a progress bar — a third of the right column for two facts.
-    # And nobody needs to be told where THEY are: the viewer's own location
-    # was the first row of this list.
-    others = [w for w in (got.get("whereis") or []) if w.get("uid") != user]
-    # What is WRONG — the door, the failing job — is an inbox item now, not a
-    # fact: it wants something from you. What is left here only informs.
-    around = list(others)
-    if got.get("money"):
-        m_ = got["money"]
-        around.append({"id": "money", "icon": "creditcard", "tint": "blue",
-                       "what": f"{m_['amount']} spent this month", "detail": m_["note"]})
-    if got.get("spend"):
-        s_ = got["spend"]
-        around.append({"id": "spend", "icon": "cpu", "tint": s_["tint"],
-                       "what": f"{s_['amount']} on models this month", "detail": s_["note"]})
-    if around:
-        d["house"] = mark_last(around[:8])
-
-    # The day
-    if evs:
-        blocks, at, span = day_strip(evs, now)
-        if blocks:
-            d["strip"], d["at"] = blocks, at
-            d["strip_from"], d["strip_to"], d["strip_note"] = span["from"], span["to"], span["note"]
-        timed = [e for e in evs if not e["allday"]]
-        nxt = next((e for e in timed if e["at"] >= now), None) or (timed or evs)[-1]
-        phrase = lead(nxt["at"], now)
-        if nxt["at"].date() != now.date():
-            phrase = phrase.rsplit(" ", 1)[0]  # the time is beside it already
-        d["now"] = {"lead": phrase, "time": clock(nxt["at"]),
-                    "title": nxt["title"],
-                    "where": nxt["where"],
-                    "len": human_len(nxt["mins"]) if not nxt["allday"] else "All day",
-                    "join": "", "join_ask": "", "faces": []}
-        rail, today = [], [e for e in evs if e["at"].date() == now.date() or e["live_now"]]
-        today.sort(key=lambda e: (not e["allday"], e["at"]))
-        for i, e in enumerate(today[:SHOWN]):
-            rail.append({"id": e["id"],
-                         "time": "all day" if e["allday"] else clock(e["at"]),
-                         "title": e["title"],
-                         "tint": e["tint"], "free": "", "what": "",
-                         "done": "1" if e["at"] + timedelta(minutes=e["mins"]) < now else "",
-                         "live": "1" if (not e["allday"]
-                                         and e["at"] <= now <= e["at"] + timedelta(minutes=e["mins"])) else "",
-                         "last": "1" if i == len(today[:SHOWN]) - 1 else "",
-                         "leave": "",
-                         # "Straight after Engineering…" under a meeting that
-                         # ended eight hours ago is not a warning any more.
-                         "tight": tight_note(today, i) if e["at"] > now else ""})
-        if rail:
-            d["rail"] = rail
-            d["rail_note"] = f"{len(today)} today"
-
-    # ---- the inbox: everything waiting on this person, as ONE list --------
+    # ---- every item the hub knows about, each with the app it opens in ----
     st = load_state(user, now)
     hidden = set(st["done"]) | set(st["later"]) | set(st["muted"])
-    queue = []
-    for m in mls:
-        queue.append({"id": m["id"], "kind": "mail", "icon": "envelope", "rank": 0 if m["unread"] else 3,
-                      "what": f"{m['who']} — {m['subject']}", "when": "", "late": ""})
-    for h in (got.get("house") or []) + (got.get("box") or []):
-        queue.append({"id": item_key("alert", h["what"]), "kind": "alert", "icon": h["icon"], "rank": 1,
-                      "what": h["what"], "when": h.get("detail", ""), "late": ""})
-    for t in tks:
-        queue.append({"id": f"t{t['id']}", "kind": "task", "icon": "checkmark.circle",
-                      "rank": 2 if t["late"] else 4,
-                      "what": t["title"], "when": t["when"], "late": t["late"]})
-    for n in nts:
-        queue.append({"id": f"n{n['id']}", "kind": "note", "icon": "sparkles", "rank": 5,
-                      "what": n["title"], "when": n["when"], "late": ""})
-    waiting = sum(1 for q in queue if q["id"] in st["later"])
-    queue = [q for q in queue if q["id"] not in hidden]
-    queue.sort(key=lambda q: q["rank"])            # the plain order, model or no model
+    things = []
 
+    def thing(iid, kind, icon, tint, what, when_="", late="", route="", dim=""):
+        things.append({"id": iid, "kind": kind, "icon": icon, "tint": tint, "what": what[:110],
+                       "when": when_, "late": late, "route": route, "dim": dim})
+
+    for m in mls:
+        thing(m["id"], "mail", "envelope", "blue", f"{m['who']} — {m['subject']}",
+              "unread" if m["unread"] else "", route=f"/inbox?selectedId={m['id'][1:]}")
+    for e in evs:
+        over = (not e["allday"]) and e["at"] + timedelta(minutes=e["mins"]) < now
+        day = "" if e["at"].date() == now.date() else e["at"].strftime("%a ")
+        thing(f"e{e['id']}", "event", "calendar", "purple", e["title"],
+              "all day" if e["allday"] else day + clock(e["at"]),
+              route=f"/calendar?day={e['at'].date().isoformat()}", dim="1" if over else "")
+    for t in tks:
+        thing(f"t{t['id']}", "task", "checkmark.circle", "orange", t["title"], t["when"], t["late"],
+              route="/reminders")
+    for h in got.get("house") or []:
+        thing(item_key("home", h["what"]), "home", h["icon"], h["tint"], h["what"], h.get("detail", ""),
+              route="/dashboard")
+    for h in got.get("box") or []:
+        thing(item_key("hub", h["what"]), "hub", h["icon"], h["tint"], h["what"], h.get("detail", ""),
+              route="/logs")
+    for n in nts:
+        thing(f"n{n['id']}", "note", "sparkles", "teal", n["title"], n["when"],
+              route=f"/feed?selected={n['id']}")
+    for w in got.get("whereis") or []:
+        if w.get("uid") != user:      # nobody needs telling where THEY are
+            thing(item_key("people", w["what"]), "people", "location", "green", w["what"], w["detail"])
+    if got.get("money"):
+        thing("money", "money", "creditcard", "blue",
+              f"{got['money']['amount']} spent this month", got["money"]["note"])
+    if got.get("spend"):
+        thing("spend", "hub", "cpu", got["spend"]["tint"],
+              f"{got['spend']['amount']} on models this month", got["spend"]["note"],
+              route="/p/costs/spend")
+    waiting = sum(1 for x in things if x["id"] in st["later"])
+    things = [x for x in things if x["id"] not in hidden]
+
+    # ---- the day, for the sidebar ----------------------------------------
+    today = sorted((e for e in evs if e["at"].date() == now.date() or e["live_now"]),
+                   key=lambda e: (not e["allday"], e["at"]))
+    if today:
+        d["rail"] = [{"id": e["id"], "time": "all day" if e["allday"] else clock(e["at"]),
+                      "title": e["title"], "tint": e["tint"], "free": "", "what": "",
+                      "done": "1" if e["at"] + timedelta(minutes=e["mins"]) < now else "",
+                      "live": "1" if (not e["allday"] and e["at"] <= now
+                                      <= e["at"] + timedelta(minutes=e["mins"])) else "",
+                      "last": "1" if i == len(today[:SHOWN]) - 1 else "",
+                      "leave": "", "tight": tight_note(today, i) if e["at"] > now else ""}
+                     for i, e in enumerate(today[:SHOWN])]
+    timed = [e for e in evs if not e["allday"] and e["at"] >= now]
+    if timed:
+        nxt = timed[0]
+        phrase = lead(nxt["at"], now)
+        if nxt["at"].date() != now.date():
+            phrase = phrase.rsplit(" ", 1)[0]
+        d["now"] = {"lead": phrase, "time": clock(nxt["at"]), "title": nxt["title"],
+                    "route": f"/calendar?day={nxt['at'].date().isoformat()}"}
+
+    # ---- what the model is told: every line, with its id ------------------
+    items = [{"id": x["id"], "kind": x["kind"], "text": x["what"], "when": x["when"],
+              "late": x["late"]} for x in things if x["kind"] != "event"]
     extras = []
     if got.get("weather"):
         w = got["weather"]
         extras.append(f"WEATHER: {w['temp']} {w['condition']}, {w['range']}.")
-    items = [{"id": q["id"], "kind": q["kind"], "text": q["what"], "when": q["when"],
-              "late": q["late"]} for q in queue]
-    ctx = ("THE INBOX — one line per item, `id | kind | what | when`:\n"
-           + "\n".join(f"{q['id']} | {q['kind']} | {q['what']} | {q['when'] or '-'}"
-                        + (" | LATE" if q["late"] else "") for q in queue)
+    if gaps:
+        extras.append("NOT AVAILABLE RIGHT NOW: " + "; ".join(g["id"] for g in gaps) + ".")
+    ctx = ("EVERY ITEM — `id | source | what | when`:\n"
+           + "\n".join(f"{x['id']} | {x['kind']} | {x['what']} | {x['when'] or '-'}"
+                        + (" | LATE" if x["late"] else "") + (" | (finished)" if x["dim"] else "")
+                        for x in things)
            + "\n\n" + context_for([], evs, now, extras))
     try:
         open(ask_path(user, "ctx"), "w").write(ctx)   # Ask answers from the same facts
     except Exception as e:  # noqa: BLE001 — Ask degrades, the page does not
         print(f"today: could not file the context: {type(e).__name__}", flush=True)
 
-    order = ranking(user, queue, digest_of(items, evs), ctx)
-    place = {o["id"]: i for i, o in enumerate(order)}
-    why = {o["id"]: o["why"] for o in order}
-    queue.sort(key=lambda q: place.get(q["id"], 99))   # stable: the rest keep their plain order
-    drawn = [{"id": q["id"], "icon": q["icon"], "what": q["what"][:110], "why": why.get(q["id"], ""),
-             "when": q["when"], "late": q["late"]} for q in queue]
-    if drawn:
-        shown, rest = drawn[:7], drawn[7:30]
-        mark_last(shown)
-        if rest:
-            shown[-1]["last"] = ""
-            mark_last(rest)
-            d["queue_rest"] = rest
-            d["queue_more"] = f"Show {len(rest)} more"
-        d["queue"] = shown
+    held = organised(user, bool(things), digest_of(items, evs), ctx, now)
+
+    # ---- subjects: the model's grouping, over the hub's own rows -----------
+    by_id = {x["id"]: x for x in things}
+    placed, subjects_ = set(), []
+    for n, sub_ in enumerate((held or {}).get("subjects") or []):
+        members = [by_id[i] for i in sub_["ids"] if i in by_id and i not in placed]
+        placed.update(x["id"] for x in members)
+        if members:
+            kinds = [x["kind"] for x in members]
+            lead_ = max(set(kinds), key=kinds.count)
+            subjects_.append({"id": f"s{n}", "title": sub_["title"], "state": sub_["state"],
+                              "tint": hue(sub_["title"]), "icon": SUBJECT_ICON.get(lead_, "square.stack"),
+                              "note": plural(len(members), "item"), "rows": members})
+    loose = [x for x in things if x["id"] not in placed]
+    if loose:
+        # Arrived since the grouping was written — or there is no grouping yet.
+        subjects_.append({"id": "rest", "title": "Not sorted yet" if held else "Everything",
+                          "state": "New since the last look." if held else "Sorting your day into subjects…",
+                          "tint": "gray", "icon": "tray", "note": plural(len(loose), "item"),
+                          "rows": loose})
+    for sub_ in subjects_:
+        sub_["rows"] = mark_last([dict(x, id=f"{sub_['id']}-{x['id']}", iid=x["id"]) for x in sub_["rows"]])
+    if subjects_:
+        d["subjects"] = subjects_
     elif not gaps:
         d["zero"] = "1"
+
+    if held and (held.get("focus") or held.get("next")):
+        d["brief"] = {"focus": [{"id": f"f{i}", "text": t} for i, t in enumerate(held.get("focus") or [])],
+                      "next": [{"id": f"n{i}", "text": t} for i, t in enumerate(held.get("next") or [])],
+                      "age": held["age"], "stale": held["stale"]}
+    elif things:
+        d["brief_pending"] = "1"
     if waiting:
         d["later_note"] = f"{waiting} back tomorrow" if waiting > 1 else "1 back tomorrow"
     last = st.get("last")
     if last and (now - (when(last["at"]) or now)) < timedelta(minutes=10):
         verb = {"done": "Done", "later": "Later", "mute": "Not for me"}[last["verb"]]
         d["undo"] = f"{verb}: {last['what']}"[:90]
+    if got.get("weather"):
+        global _scene
+        _scene = scene_for(got["weather"].get("condition", ""), now)
 
     told = fixes(user)
     if told:
@@ -1539,6 +1570,53 @@ def greeting(now):
     part = "morning" if h < 12 else ("afternoon" if h < 18 else "evening")
     return f"{now.strftime('%A')} {part}"
 
+
+# ---------------------------------------------------------------------------
+# The sky
+# ---------------------------------------------------------------------------
+# One self-contained page: a gradient for the hour, and what is falling or
+# drifting through it. No library, no network, no assets — it has to draw
+# inside a pane on a box that may be offline. It darkens toward the bottom
+# and the left, because words are set over it.
+
+SKY_HTML = r"""<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#0d1117}canvas{display:block;width:100%;height:100%}
+.scrim{position:fixed;inset:0;background:linear-gradient(90deg,rgba(10,12,16,.72),rgba(10,12,16,.28) 60%,rgba(10,12,16,.10)),
+linear-gradient(0deg,rgba(10,12,16,.55),rgba(10,12,16,0) 60%)}</style>
+<canvas id="c"></canvas><div class="scrim"></div>
+<script>
+const scene="__SCENE__",[kind,time]=scene.split("-"),night=time==="night";
+const c=document.getElementById("c"),x=c.getContext("2d");let W,H,D=Math.min(devicePixelRatio||1,2);
+function size(){W=c.width=innerWidth*D;H=c.height=innerHeight*D}size();addEventListener("resize",size);
+const SKY={"clear-day":["#3b82c4","#8ec5ea"],"clear-night":["#070b1a","#1b2a4a"],"cloud-day":["#5b6f86","#9fb1c4"],
+"cloud-night":["#0b0f18","#232c3b"],"rain-day":["#3c4a5c","#6b7c90"],"rain-night":["#070a10","#1a2230"],
+"snow-day":["#7d8ea3","#c9d5e2"],"snow-night":["#0c111b","#2a3446"],"fog-day":["#77818c","#b4bcc4"],
+"fog-night":["#0d1016","#2a2f38"],"storm-day":["#252c38","#4a5566"],"storm-night":["#05070b","#161b25"]};
+const R=(a,b)=>a+Math.random()*(b-a);
+const stars=Array.from({length:night&&kind!=="rain"&&kind!=="storm"?140:0},()=>({x:R(0,1),y:R(0,.8),r:R(.4,1.4),p:R(0,6.28),s:R(.4,1.4)}));
+const nCloud={clear:2,cloud:7,rain:6,storm:7,snow:5,fog:9}[kind]||3;
+const clouds=Array.from({length:nCloud},()=>({x:R(-.2,1.2),y:R(.02,kind==="fog"?.95:.55),w:R(.28,.6),v:R(.004,.014),a:R(.10,.24)}));
+const nDrop=kind==="rain"?260:kind==="storm"?420:kind==="snow"?170:0;
+const drops=Array.from({length:nDrop},()=>({x:R(0,1.2),y:R(0,1),v:R(.6,1.2),l:R(.012,.03),d:R(0,6.28),r:R(1,2.6)}));
+let flash=0,last=performance.now();
+function frame(t){const dt=Math.min((t-last)/1000,.05);last=t;
+ const g=x.createLinearGradient(0,0,0,H),s=SKY[scene]||SKY["clear-day"];g.addColorStop(0,s[0]);g.addColorStop(1,s[1]);x.fillStyle=g;x.fillRect(0,0,W,H);
+ if(kind==="clear"){const cx=W*.82,cy=H*(night?.26:.22),r=H*(night?.09:.13);
+  const h=x.createRadialGradient(cx,cy,0,cx,cy,r*4.5);h.addColorStop(0,night?"rgba(210,225,255,.30)":"rgba(255,236,170,.55)");h.addColorStop(1,"rgba(255,255,255,0)");
+  x.fillStyle=h;x.fillRect(0,0,W,H);x.beginPath();x.arc(cx,cy,r*(1+.02*Math.sin(t/900)),0,7);x.fillStyle=night?"#e8eefc":"#fff3c4";x.fill()}
+ for(const st of stars){x.globalAlpha=.35+.55*Math.abs(Math.sin(t/1000*st.s+st.p));x.beginPath();x.arc(st.x*W,st.y*H,st.r*D,0,7);x.fillStyle="#fff";x.fill()}x.globalAlpha=1;
+ for(const k of clouds){k.x+=k.v*dt;if(k.x-k.w>1.1)k.x=-k.w-.1;const cx=k.x*W,cy=k.y*H,rw=k.w*W;
+  const h=x.createRadialGradient(cx,cy,0,cx,cy,rw);const tone=night?"200,210,230":"255,255,255";
+  h.addColorStop(0,`rgba(${tone},${k.a})`);h.addColorStop(1,`rgba(${tone},0)`);x.fillStyle=h;x.save();x.translate(cx,cy);x.scale(1,.34);x.translate(-cx,-cy);
+  x.beginPath();x.arc(cx,cy,rw,0,7);x.fill();x.restore()}
+ if(kind==="snow"){x.fillStyle="rgba(255,255,255,.85)";for(const d of drops){d.y+=d.v*dt*.12;d.d+=dt;d.x+=Math.sin(d.d)*.0006;if(d.y>1.02){d.y=-.02;d.x=R(0,1)}
+   x.beginPath();x.arc(d.x*W,d.y*H,d.r*D,0,7);x.fill()}}
+ else if(nDrop){x.strokeStyle=night?"rgba(170,195,235,.38)":"rgba(225,238,255,.5)";x.lineWidth=1.1*D;x.beginPath();
+  for(const d of drops){d.y+=d.v*dt*1.5;d.x-=d.v*dt*.22;if(d.y>1.03){d.y=-.05;d.x=R(0,1.2)}x.moveTo(d.x*W,d.y*H);x.lineTo(d.x*W-d.l*H*.16,d.y*H+d.l*H)}x.stroke()}
+ if(kind==="storm"){if(Math.random()<.004)flash=1;if(flash>0){x.fillStyle=`rgba(235,240,255,${flash*.55})`;x.fillRect(0,0,W,H);flash-=dt*3.2}}
+ requestAnimationFrame(frame)}
+requestAnimationFrame(frame);
+</script>"""
 
 # ---------------------------------------------------------------------------
 # Serving
@@ -1598,6 +1676,17 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/leo/ui/data":
             body = json.dumps(payload(self.headers.get("x-leo-acting-grant"),
                                       self.headers.get("x-leo-user-id") or "")).encode()
+        elif path.rstrip("/").endswith("/sky"):
+            # The hero's wallpaper: the weather outside, moving. A `webPane`
+            # asks for it through the hub's app proxy (`/p/today/sky`).
+            blob = SKY_HTML.replace("__SCENE__", _scene).encode()
+            self.send_response(200)
+            self.send_header("content-type", "text/html; charset=utf-8")
+            self.send_header("cache-control", "no-store")
+            self.send_header("content-length", str(len(blob)))
+            self.end_headers()
+            self.wfile.write(blob)
+            return
         elif path in ("/leo/health", "/health"):
             body = b'{"ok":true}'
         else:

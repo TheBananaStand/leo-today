@@ -1,49 +1,59 @@
 <div id="today" subset="15" class="h-full flex flex-col overflow-y-auto bg-canvas">
 
-  <!-- An inbox, not a dashboard. One list of everything waiting on you —
-       a message from a person, something due, something wrong — in the
-       order a model thinks you should deal with it, and four verbs on every
-       row: done, later, not for me, ask. The top row IS the one thing; there
-       is no sentence above the list telling you what the list says. -->
+  <!-- One place instead of five apps. A model sorts everything the hub knows
+       — mail, calendar, reminders, the house, the hub itself — into SUBJECTS,
+       so a message, a reminder and a meeting about the same thing sit
+       together; every row opens the app it came from. Above it, a cached
+       summary of what needs you and what is coming, over the sky outside. -->
 
-  <!-- One item. The row is the selection; the verbs belong to the selected
-       row, so the page shows one set of buttons, not one per line. Every
-       press hands over `what` as well as `id`, because the process needs
-       the words to say what an undo would bring back. -->
-  <template name="item">
-    <li id="q-{x.id}" class="flex flex-col">
-      <div class="flex items-center gap-1 min-h-12 px-2">
-        <a id="done-{x.id}" action="done" args="id={x.id} what={x.what}" shortcut="e" advance="sel"
-           aria-label="Done: {x.what}"
-           class="shrink-0 size-11 flex items-center justify-center rounded-full">
-          <span class="size-5 rounded-full border-2 border-muted"></span>
-        </a>
-        <a id="pick-{x.id}" select="sel={x.id}" selected="sel={x.id}"
-           class="flex items-center gap-3 flex-1 min-w-0 min-h-12 px-2 py-1.5 rounded-lg selected:bg-elevated">
-          <img icon="{x.icon}" alt="" class="size-4 shrink-0 text-muted">
-          <div class="flex flex-col gap-0.5 min-w-0 flex-1">
-            <span class="text-sm truncate">{x.what}</span>
-            <span if="x.why" class="text-xs text-secondary truncate">{x.why}</span>
-          </div>
-          <span if="x.late" class="shrink-0 px-2 py-0.5 rounded-full text-xs font-medium bg-danger text-danger tabular-nums">{x.when}</span>
-          <span if="!x.late" class="shrink-0 text-xs text-muted tabular-nums">{x.when}</span>
-        </a>
+  <template name="piece-body">
+    <div class="flex items-center gap-3 flex-1 min-w-0">
+      <img icon="{r.icon}" alt="" tint="{r.tint}" class="size-4 shrink-0 text-tint">
+      <span if="!r.dim" class="flex-1 min-w-0 text-sm truncate">{r.what}</span>
+      <span if="r.dim" class="flex-1 min-w-0 text-sm text-muted truncate">{r.what}</span>
+      <span if="r.late" class="shrink-0 px-2 py-0.5 rounded-full text-xs font-medium bg-danger text-danger tabular-nums">{r.when}</span>
+      <span if="!r.late" class="shrink-0 text-xs text-muted tabular-nums">{r.when}</span>
+    </div>
+  </template>
+
+  <!-- One piece of a subject. Pressing it goes to the thing itself, in the
+       app that owns it. Done / Later / Not for me are on the row's menu —
+       right-click, long press, swipe — not on its face. -->
+  <template name="piece">
+    <li id="r-{r.id}" class="flex flex-col">
+      <a if="r.route" id="open-{r.id}" action="open" args="route={r.route}"
+         class="flex items-center min-h-11 px-4">
+        <use template="piece-body"></use>
+      </a>
+      <div if="!r.route" class="flex items-center min-h-11 px-4">
+        <use template="piece-body"></use>
       </div>
-      <div if="$.sel == {x.id}" class="flex flex-wrap items-center gap-2 pl-16 pr-3 pb-3">
-        <a id="later-{x.id}" action="later" args="id={x.id} what={x.what}" shortcut="h" advance="sel"
-           class="min-h-8 px-3 flex items-center rounded-full text-xs font-medium bg-elevated">Later</a>
-        <a id="mute-{x.id}" action="mute" args="id={x.id} what={x.what}" shortcut="x" advance="sel"
-           class="min-h-8 px-3 flex items-center rounded-full text-xs font-medium bg-elevated">Not for me</a>
-        <a id="askrow-{x.id}" action="ask" args="text='What should I do about this — {x.what}'"
-           class="min-h-8 px-3 flex items-center rounded-full text-xs font-medium text-secondary">Ask about this</a>
-      </div>
-      <span if="!x.last" class="ml-14 border-t"></span>
+      <span if="!r.last" class="ml-11 border-t"></span>
       <menu>
-        <a id="m-done-{x.id}" action="done" args="id={x.id} what={x.what}" swipe="trailing">Done</a>
-        <a id="m-later-{x.id}" action="later" args="id={x.id} what={x.what}" swipe="leading">Later</a>
-        <a id="m-mute-{x.id}" action="mute" args="id={x.id} what={x.what}">Not for me</a>
+        <a id="m-done-{r.id}" action="done" args="id={r.iid} what={r.what}" swipe="trailing">Done</a>
+        <a id="m-later-{r.id}" action="later" args="id={r.iid} what={r.what}" swipe="leading">Later</a>
+        <a id="m-mute-{r.id}" action="mute" args="id={r.iid} what={r.what}">Not for me</a>
+        <a id="m-ask-{r.id}" action="ask" args="text='What should I do about this — {r.what}'">Ask about this</a>
       </menu>
     </li>
+  </template>
+
+  <template name="subject">
+    <article id="sub-{s.id}" tint="{s.tint}" class="flex flex-col rounded-xl bg-surface overflow-hidden">
+      <div class="flex items-start gap-3 px-4 pt-4 pb-2">
+        <span class="size-9 shrink-0 flex items-center justify-center rounded-lg bg-tint-wash">
+          <img icon="{s.icon}" alt="" class="size-4 text-tint">
+        </span>
+        <div class="flex flex-col gap-0.5 min-w-0 flex-1">
+          <h3 class="text-base font-semibold truncate">{s.title}</h3>
+          <span class="text-xs text-secondary line-clamp-2">{s.state}</span>
+        </div>
+        <span class="shrink-0 pt-1 text-xs text-muted tabular-nums">{s.note}</span>
+      </div>
+      <ul class="flex flex-col pb-1">
+        <use template="piece" each="r in s.rows"></use>
+      </ul>
+    </article>
   </template>
 
   <template name="moment">
@@ -80,66 +90,69 @@
     </li>
   </template>
 
-  <template name="fact">
-    <li id="x-{x.id}" class="flex flex-col">
-      <div class="flex items-start gap-3 min-h-11 px-4 py-2.5">
-        <img icon="{x.icon}" alt="" tint="{x.tint}" class="size-4 mt-0.5 shrink-0 text-tint">
-        <div class="flex flex-col gap-0.5 min-w-0 flex-1">
-          <span class="text-sm line-clamp-2">{x.what}</span>
-          <span if="x.detail" class="text-xs text-muted truncate">{x.detail}</span>
-        </div>
-      </div>
-      <span if="!x.last" class="ml-11 border-t"></span>
-    </li>
-  </template>
+  <div class="flex flex-col gap-6 w-full max-w-6xl mx-auto px-6 py-6">
 
-  <div class="flex flex-col gap-6 w-full max-w-5xl mx-auto px-6 py-6">
-
-    <header id="bar" class="flex items-center gap-3">
-      <div class="flex flex-col gap-0.5 min-w-0 flex-1">
-        <span class="text-2xl font-bold truncate">{greeting}</span>
-        <span class="text-sm text-muted truncate">{date_line}</span>
-      </div>
-      <div if="weather" class="flex items-center gap-2 shrink-0 px-3 h-9 rounded-full bg-surface">
-        <img icon="{weather.symbol}" alt="{weather.condition}" tint="{weather.tint}" class="size-4 text-tint">
-        <span class="text-sm font-semibold tabular-nums">{weather.temp}</span>
-        <span class="hidden md:flex text-xs text-muted tabular-nums">{weather.range}</span>
-      </div>
-    </header>
-
-    <div if="nothing_worked" id="unreachable" class="flex flex-col items-center gap-3 py-14 rounded-xl bg-surface">
-      <img icon="wifi.exclamationmark" alt="" tint="amber" class="size-10 text-tint">
-      <span class="text-lg font-semibold">Couldn't put today together</span>
-      <span class="max-w-prose px-6 text-sm text-muted text-center">{why}</span>
-      <a id="retry" action="refresh" shortcut="r"
-         class="mt-1 h-10 px-5 flex items-center rounded-lg text-sm font-semibold bg-accent text-on-accent">Try again</a>
-    </div>
-
-    <div class="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-
-      <!-- ---------- the inbox ---------- -->
-      <section id="inbox" class="flex flex-col gap-3 min-w-0">
-        <div class="flex items-center gap-3 min-h-8">
-          <h2 class="text-xs font-semibold text-secondary uppercase">Inbox</h2>
-          <span if="later_note" class="text-xs text-muted">{later_note}</span>
-          <a if="!$.fixing" id="rules" select="fixing=1" shortcut="w"
-             class="ml-auto flex items-center min-h-8 px-3 -mr-3 rounded-full text-xs font-medium text-secondary">Rules</a>
-          <a if="$.fixing" id="rules-close" select="fixing=" shortcut="esc"
-             class="ml-auto flex items-center min-h-8 px-3 -mr-3 rounded-full text-xs font-medium text-secondary">Close</a>
+    <!-- ===================== THE HERO =====================
+         The sky outside, moving, and over it the two things the page is
+         opened for: what needs you, and what is coming. The summary is
+         cached and says how old it is; "Not right?" teaches it. -->
+    <section id="hero" class="relative flex flex-col rounded-xl overflow-hidden bg-surface">
+      <native ref="webPane" props="route='/p/today/sky'" class="absolute inset-0">
+        <div tint="blue" class="h-full bg-tint-wash"></div>
+      </native>
+      <div class="relative z-10 flex flex-col gap-6 p-6">
+        <div class="flex items-start gap-4">
+          <div class="flex flex-col gap-1 min-w-0 flex-1">
+            <h1 class="text-3xl font-bold truncate">{greeting}</h1>
+            <span class="text-sm text-secondary truncate">{date_line}</span>
+          </div>
+          <div if="weather" class="flex flex-col items-end gap-1 shrink-0">
+            <div class="flex items-center gap-2">
+              <img icon="{weather.symbol}" alt="" tint="{weather.tint}" class="size-6 text-tint">
+              <span class="text-3xl font-bold tabular-nums">{weather.temp}</span>
+            </div>
+            <span class="text-xs text-secondary tabular-nums">{weather.condition} · {weather.range}</span>
+          </div>
         </div>
 
-        <!-- Standing rules for the order: what always comes first, what is
-             never for you. "Not for me" on a row writes one of these. -->
-        <div if="$.fixing" id="fixing" class="flex flex-col gap-2 p-3 rounded-xl bg-surface">
+        <div if="brief" id="brief" class="grid gap-x-10 gap-y-5 md:grid-cols-[1.3fr_1fr]">
+          <div if="brief.focus" class="flex flex-col gap-2 min-w-0">
+            <h2 class="text-xs font-semibold text-secondary uppercase">Focus</h2>
+            <span each="f in brief.focus" id="bf-{f.id}" class="text-base font-medium">{f.text}</span>
+          </div>
+          <div if="brief.next" class="flex flex-col gap-2 min-w-0">
+            <h2 class="text-xs font-semibold text-secondary uppercase">Coming up</h2>
+            <span each="n in brief.next" id="bn-{n.id}" class="text-sm text-secondary">{n.text}</span>
+          </div>
+        </div>
+        <div if="brief_pending" id="brief-pending" class="flex flex-col gap-2">
+          <span class="h-5 w-80 rounded bg-elevated animate-pulse"></span>
+          <span class="text-xs text-secondary">Reading your day…</span>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-x-1 gap-y-1">
+          <a if="!$.fixing" id="wrong" select="fixing=1" shortcut="w"
+             class="flex items-center min-h-8 px-3 -ml-3 rounded-full text-xs font-medium text-secondary">Not right?</a>
+          <a if="$.fixing" id="wrong-close" select="fixing=" shortcut="esc"
+             class="flex items-center min-h-8 px-3 -ml-3 rounded-full text-xs font-medium text-secondary">Close</a>
+          <a if="brief.age" id="rewrite" action="rewrite" aria-label="Write it again"
+             class="flex items-center gap-1.5 min-h-8 px-2 rounded-full text-xs text-secondary tabular-nums">
+            <img icon="arrow.clockwise" alt="" class="size-3">
+            <span>{brief.age}</span>
+          </a>
+          <span if="brief.stale" class="text-xs text-secondary animate-pulse">rewriting…</span>
+          <span if="corrections_note" class="ml-auto shrink-0 text-xs text-secondary">{corrections_note}</span>
+        </div>
+
+        <div if="$.fixing" id="fixing" class="flex flex-col gap-2 p-3 rounded-lg bg-elevated">
           <form id="fix" action="correct" args="text={$.form.fix}" class="flex items-center gap-2">
             <input id="fix-field" bind="form.fix" required autofocus
-                   placeholder="A rule — “newsletters never”, “anything from Steph first”"
-                   class="flex-1 h-10 min-w-0">
+                   placeholder="What did it get wrong? It will remember."
+                   class="flex-1 max-w-2xl h-10 min-w-0">
             <button id="fix-save" action="correct" args="text={$.form.fix}"
                     disabled="!$.form.fix"
                     class="shrink-0 h-10 px-4 rounded-lg bg-accent text-on-accent">Save</button>
           </form>
-          <span if="!corrections" class="px-1 text-xs text-muted">It orders your inbox by these, every time, from now on.</span>
           <div if="corrections" class="flex flex-col">
             <div each="c in corrections" id="c-{c.id}" class="flex items-center gap-1 min-h-9 px-1">
               <span class="min-w-0 text-sm text-secondary line-clamp-2">{c.text}</span>
@@ -150,99 +163,81 @@
             </div>
           </div>
         </div>
+      </div>
+    </section>
 
-        <!-- What you just did, and the way back. An inbox you clear by
-             keystroke needs one, or `e` on the wrong row is a small loss
-             every time. -->
+    <div if="nothing_worked" id="unreachable" class="flex flex-col items-center gap-3 py-14 rounded-xl bg-surface">
+      <img icon="wifi.exclamationmark" alt="" tint="amber" class="size-10 text-tint">
+      <span class="text-lg font-semibold">Couldn't put today together</span>
+      <span class="max-w-prose px-6 text-sm text-muted text-center">{why}</span>
+      <a id="retry" action="refresh" shortcut="r"
+         class="mt-1 h-10 px-5 flex items-center rounded-lg text-sm font-semibold bg-accent text-on-accent">Try again</a>
+    </div>
+
+    <div class="grid gap-6 lg:grid-cols-[1fr_320px]">
+
+      <!-- ---------- MAIN: the day, by subject ---------- -->
+      <main id="subjects" class="flex flex-col gap-4 min-w-0">
         <div if="undo" id="undo" class="flex items-center gap-3 min-h-10 pl-4 pr-1 rounded-xl bg-surface">
           <span class="flex-1 min-w-0 text-xs text-secondary truncate">{undo}</span>
           <a id="undo-press" action="undo" shortcut="z"
              class="shrink-0 min-h-8 px-3 flex items-center rounded-full text-xs font-semibold text-accent">Undo</a>
         </div>
-
-        <ul if="queue" keys="sel" class="flex flex-col rounded-xl bg-surface overflow-hidden">
-          <use template="item" each="x in queue"></use>
-          <use template="item" each="x in queue_rest" if="$.more"></use>
-        </ul>
-        <div if="queue_more" class="flex">
-          <a if="!$.more" id="more-open" select="more=1" shortcut="m"
-             class="min-h-9 px-3 flex items-center rounded-lg text-xs font-medium text-secondary">{queue_more}</a>
-          <a if="$.more" id="more-close" select="more=" shortcut="m"
-             class="min-h-9 px-3 flex items-center rounded-lg text-xs font-medium text-secondary">Show less</a>
-        </div>
-
-        <!-- Zero. The state this page is for. -->
+        <use template="subject" each="s in subjects"></use>
         <div if="zero" id="zero" class="flex flex-col items-center gap-2 py-14 rounded-xl bg-surface">
           <img icon="checkmark.circle" alt="" tint="green" class="size-10 text-tint">
           <span class="text-lg font-semibold">Nothing needs you</span>
-          <span if="later_note" class="text-sm text-muted">{later_note}</span>
         </div>
-      </section>
+        <span if="later_note" class="px-1 text-xs text-muted">{later_note}</span>
+      </main>
 
-      <!-- ---------- context: the day, and what only informs ---------- -->
-      <div class="flex flex-col gap-6 min-w-0">
+      <!-- ---------- SIDEBAR: the clock side of the day, and Ask ---------- -->
+      <aside id="side" class="flex flex-col gap-6 min-w-0">
         <section if="rail" id="day" class="flex flex-col gap-3">
-          <div class="flex items-center min-h-8">
-            <h2 class="text-xs font-semibold text-secondary uppercase">Today</h2>
-          </div>
+          <h2 class="text-xs font-semibold text-secondary uppercase">Today</h2>
           <ul class="flex flex-col p-4 pb-0 rounded-xl bg-surface">
             <use template="moment" each="m in rail"></use>
           </ul>
-          <div if="now" id="now" class="flex items-center gap-2 px-4">
-            <span class="shrink-0 text-xs font-semibold text-secondary uppercase">{now.lead}</span>
-            <span class="shrink-0 text-xs font-semibold tabular-nums">{now.time}</span>
-            <span class="flex-1 min-w-0 text-xs text-secondary truncate">{now.title}</span>
+        </section>
+        <a if="now" id="now" action="open" args="route={now.route}"
+           class="flex flex-col gap-1 p-4 rounded-xl bg-surface">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-semibold text-secondary uppercase">{now.lead}</span>
+            <span class="text-xs font-semibold tabular-nums">{now.time}</span>
+          </div>
+          <span class="text-sm line-clamp-2">{now.title}</span>
+        </a>
+
+        <section if="!nothing_worked" id="ask" class="flex flex-col gap-3">
+          <h2 class="text-xs font-semibold text-secondary uppercase">Ask</h2>
+          <div class="flex flex-col gap-3 p-3 rounded-xl bg-surface">
+            <div if="asking" id="asking" class="flex items-center gap-2 min-h-8 px-1">
+              <span class="size-1.5 shrink-0 rounded-full bg-accent animate-pulse"></span>
+              <span class="flex-1 min-w-0 text-sm text-secondary truncate">{asking}</span>
+            </div>
+            <div if="answer" id="answer" class="flex flex-col gap-2 px-1">
+              <div class="flex items-start gap-2">
+                <span class="flex-1 min-w-0 text-sm font-semibold line-clamp-2">{answer.question}</span>
+                <a id="clear-answer" action="clear" aria-label="Clear this answer"
+                   class="shrink-0 size-8 -mr-2 -mt-1 flex items-center justify-center rounded-full">
+                  <img icon="xmark" alt="" class="size-3 text-muted">
+                </a>
+              </div>
+              <markdown if="answer.text" class="text-sm select-text">{answer.text}</markdown>
+              <span if="answer.failed" class="text-xs text-muted">Couldn't answer — {answer.failed}</span>
+            </div>
+            <form id="compose" action="ask" args="text={$.form.message}" class="flex items-center gap-2">
+              <input id="ask-field" bind="form.message" placeholder="Ask about today" shortcut="/" required
+                     class="flex-1 h-10 min-w-0">
+              <button id="ask-send" action="ask" args="text={$.form.message}"
+                      disabled="!$.form.message"
+                      class="shrink-0 h-10 px-4 rounded-lg bg-accent text-on-accent">Ask</button>
+            </form>
           </div>
         </section>
 
-        <section if="house" id="house" class="flex flex-col gap-3">
-          <h2 class="text-xs font-semibold text-secondary uppercase">Worth knowing</h2>
-          <ul class="flex flex-col rounded-xl bg-surface overflow-hidden">
-            <use template="fact" each="x in house"></use>
-          </ul>
-        </section>
-      </div>
+        <span if="gaps_line" id="gaps" class="px-1 text-xs text-muted line-clamp-2">{gaps_line}</span>
+      </aside>
     </div>
-
-    <section if="!nothing_worked" id="ask" class="flex flex-col gap-3 p-4 rounded-xl bg-surface">
-      <div if="asking" id="asking" class="flex items-center gap-3 min-h-9">
-        <span class="size-1.5 shrink-0 rounded-full bg-accent animate-pulse"></span>
-        <span class="min-w-0 max-w-prose text-sm text-secondary truncate">{asking}</span>
-        <span class="shrink-0 text-xs text-muted">thinking…</span>
-      </div>
-      <div if="answer" id="answer" class="flex flex-col gap-2 pb-1">
-        <div class="flex items-start gap-3">
-          <span class="flex-1 min-w-0 text-sm font-semibold line-clamp-2">{answer.question}</span>
-          <span class="shrink-0 text-xs text-muted tabular-nums">{answer.age}</span>
-          <a id="clear-answer" action="clear" aria-label="Clear this answer"
-             class="shrink-0 size-9 -mr-2 -my-2 flex items-center justify-center rounded-full">
-            <img icon="xmark" alt="" class="size-3.5 text-muted">
-          </a>
-        </div>
-        <markdown if="answer.text" class="max-w-prose text-sm select-text">{answer.text}</markdown>
-        <div if="answer.failed" class="flex flex-wrap items-center gap-3">
-          <span class="min-w-0 text-xs text-muted truncate">Couldn't answer — {answer.failed}</span>
-          <a id="ask-again" action="ask" args="text={answer.question}"
-             class="shrink-0 min-h-9 px-3 flex items-center rounded-lg text-xs font-medium bg-elevated">Try again</a>
-        </div>
-      </div>
-      <form id="compose" action="ask" args="text={$.form.message}" class="flex items-center gap-2">
-        <input id="ask-field" bind="form.message" placeholder="Ask about today" shortcut="/" required
-               class="flex-1 h-10 min-w-0">
-        <button id="ask-send" action="ask" args="text={$.form.message}"
-                disabled="!$.form.message"
-                class="shrink-0 h-10 px-5 rounded-lg bg-accent text-on-accent">Ask</button>
-      </form>
-    </section>
-
-    <footer class="flex flex-wrap items-center gap-x-6 gap-y-2 pb-2">
-      <span if="gaps_line" id="gaps" class="min-w-0 text-xs text-muted truncate">{gaps_line}</span>
-      <div if="keys" id="keys" class="flex flex-wrap items-center gap-x-4 gap-y-2 ml-auto">
-        <div each="k in keys" id="k-{k.id}" class="flex items-center gap-1.5">
-          <span class="px-1.5 h-5 flex items-center rounded bg-elevated text-xs font-mono text-secondary">{k.key}</span>
-          <span class="text-xs text-muted">{k.does}</span>
-        </div>
-      </div>
-    </footer>
   </div>
 </div>

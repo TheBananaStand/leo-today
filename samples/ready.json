@@ -5,33 +5,13 @@
  "keys": [
   {
    "id": "k1",
-   "key": "j k",
-   "does": "move"
+   "key": "/",
+   "does": "ask"
   },
   {
    "id": "k2",
-   "key": "e",
-   "does": "done"
-  },
-  {
-   "id": "k3",
-   "key": "h",
-   "does": "later"
-  },
-  {
-   "id": "k4",
-   "key": "x",
-   "does": "not for me"
-  },
-  {
-   "id": "k5",
-   "key": "z",
-   "does": "undo"
-  },
-  {
-   "id": "k6",
-   "key": "/",
-   "does": "ask"
+   "key": "w",
+   "does": "rules"
   }
  ],
  "weather": {
@@ -40,88 +20,6 @@
   "condition": "Cloudy now, today",
   "symbol": "cloud.sun",
   "tint": "blue"
- },
- "house": [
-  {
-   "id": "w0",
-   "uid": "u1",
-   "icon": "location",
-   "tint": "green",
-   "what": "Scott — 3 Maple St",
-   "detail": "4h ago",
-   "last": ""
-  },
-  {
-   "id": "money",
-   "icon": "creditcard",
-   "tint": "blue",
-   "what": "$2,341 spent this month",
-   "detail": "Travel is the largest at $980",
-   "last": ""
-  },
-  {
-   "id": "spend",
-   "icon": "cpu",
-   "tint": "amber",
-   "what": "$137.42 on models this month",
-   "detail": "$5.97 a day — on track for $179 by month end",
-   "last": "1"
-  }
- ],
- "strip": [
-  {
-   "id": "f0",
-   "span": "60",
-   "free": "1",
-   "tint": "",
-   "label": ""
-  },
-  {
-   "id": "1",
-   "span": "60",
-   "free": "",
-   "tint": "blue",
-   "label": ""
-  },
-  {
-   "id": "f2",
-   "span": "60",
-   "free": "1",
-   "tint": "",
-   "label": ""
-  },
-  {
-   "id": "3",
-   "span": "60",
-   "free": "",
-   "tint": "blue",
-   "label": "Weekly"
-  },
-  {
-   "id": "fz",
-   "span": "480",
-   "free": "1",
-   "tint": "",
-   "label": "8 hours clear"
-  }
- ],
- "at": {
-  "before": "720",
-  "after": "0",
-  "label": "19:25"
- },
- "strip_from": "07:00",
- "strip_to": "19:00",
- "strip_note": "2h 00m booked",
- "now": {
-  "lead": "Tomorrow",
-  "time": "08:00",
-  "title": "Flight to Austin",
-  "where": "",
-  "len": "3h",
-  "join": "",
-  "join_ask": "",
-  "faces": []
  },
  "rail": [
   {
@@ -164,84 +62,255 @@
    "tight": ""
   }
  ],
- "rail_note": "3 today",
- "queue_rest": [
+ "now": {
+  "lead": "Tomorrow",
+  "time": "08:00",
+  "title": "Flight to Austin",
+  "route": "/calendar?day=2026-11-24"
+ },
+ "subjects": [
   {
-   "id": "nf1",
-   "icon": "sparkles",
-   "what": "Amex is running hot",
-   "why": "",
-   "when": "19:25",
-   "late": "",
-   "last": "1"
+   "id": "s0",
+   "title": "Austin trip",
+   "state": "Flying tomorrow; passport and dates still open.",
+   "tint": "pink",
+   "icon": "checklist",
+   "note": "4 items",
+   "rows": [
+    {
+     "id": "s0-mm1",
+     "kind": "mail",
+     "icon": "envelope",
+     "tint": "blue",
+     "what": "Maya Chen — Austin itinerary — need your dates",
+     "when": "unread",
+     "late": "",
+     "route": "/inbox?selectedId=m1",
+     "dim": "",
+     "iid": "mm1",
+     "last": ""
+    },
+    {
+     "id": "s0-tr1",
+     "kind": "task",
+     "icon": "checkmark.circle",
+     "tint": "orange",
+     "what": "Renew the passport for Austin",
+     "when": "4 days late",
+     "late": "1",
+     "route": "/reminders",
+     "dim": "",
+     "iid": "tr1",
+     "last": ""
+    },
+    {
+     "id": "s0-tr3",
+     "kind": "task",
+     "icon": "checkmark.circle",
+     "tint": "orange",
+     "what": "Book the Austin flights",
+     "when": "Today",
+     "late": "",
+     "route": "/reminders",
+     "dim": "",
+     "iid": "tr3",
+     "last": ""
+    },
+    {
+     "id": "s0-e4",
+     "kind": "event",
+     "icon": "calendar",
+     "tint": "purple",
+     "what": "Flight to Austin",
+     "when": "Tue 08:00",
+     "late": "",
+     "route": "/calendar?day=2026-11-24",
+     "dim": "",
+     "iid": "e4",
+     "last": "1"
+    }
+   ]
+  },
+  {
+   "id": "s1",
+   "title": "The house",
+   "state": "Front door is open.",
+   "tint": "orange",
+   "icon": "checklist",
+   "note": "1 item",
+   "rows": [
+    {
+     "id": "s1-tr2",
+     "kind": "task",
+     "icon": "checkmark.circle",
+     "tint": "orange",
+     "what": "Fix light switch",
+     "when": "5 months",
+     "late": "",
+     "route": "/reminders",
+     "dim": "",
+     "iid": "tr2",
+     "last": "1"
+    }
+   ]
+  },
+  {
+   "id": "rest",
+   "title": "Not sorted yet",
+   "state": "New since the last look.",
+   "tint": "gray",
+   "icon": "tray",
+   "note": "10 items",
+   "rows": [
+    {
+     "id": "rest-e2",
+     "kind": "event",
+     "icon": "calendar",
+     "tint": "purple",
+     "what": "Mike surgery",
+     "when": "all day",
+     "late": "",
+     "route": "/calendar?day=2026-11-23",
+     "dim": "",
+     "iid": "e2",
+     "last": ""
+    },
+    {
+     "id": "rest-e1",
+     "kind": "event",
+     "icon": "calendar",
+     "tint": "purple",
+     "what": "Engineering Product Meeting",
+     "when": "08:00",
+     "late": "",
+     "route": "/calendar?day=2026-11-23",
+     "dim": "1",
+     "iid": "e1",
+     "last": ""
+    },
+    {
+     "id": "rest-e3",
+     "kind": "event",
+     "icon": "calendar",
+     "tint": "purple",
+     "what": "Weekly Sales Meeting",
+     "when": "10:00",
+     "late": "",
+     "route": "/calendar?day=2026-11-23",
+     "dim": "1",
+     "iid": "e3",
+     "last": ""
+    },
+    {
+     "id": "rest-home-8d75282c64",
+     "kind": "home",
+     "icon": "lock.open",
+     "tint": "red",
+     "what": "Front Door is unlocked",
+     "when": "",
+     "late": "",
+     "route": "/dashboard",
+     "dim": "",
+     "iid": "home-8d75282c64",
+     "last": ""
+    },
+    {
+     "id": "rest-hub-3f4f948776",
+     "kind": "hub",
+     "icon": "clock.badge.exclamationmark",
+     "tint": "amber",
+     "what": "Nightly release is failing",
+     "when": "last ran 11:15 22 Nov",
+     "late": "",
+     "route": "/logs",
+     "dim": "",
+     "iid": "hub-3f4f948776",
+     "last": ""
+    },
+    {
+     "id": "rest-hub-53a705a75b",
+     "kind": "hub",
+     "icon": "shippingbox",
+     "tint": "teal",
+     "what": "1 build landed, unannounced",
+     "when": "1.4.0",
+     "late": "",
+     "route": "/logs",
+     "dim": "",
+     "iid": "hub-53a705a75b",
+     "last": ""
+    },
+    {
+     "id": "rest-nf1",
+     "kind": "note",
+     "icon": "sparkles",
+     "tint": "teal",
+     "what": "Amex is running hot",
+     "when": "19:38",
+     "late": "",
+     "route": "/feed?selected=f1",
+     "dim": "",
+     "iid": "nf1",
+     "last": ""
+    },
+    {
+     "id": "rest-people-0a0a0da94f",
+     "kind": "people",
+     "icon": "location",
+     "tint": "green",
+     "what": "Scott — 3 Maple St",
+     "when": "4h ago",
+     "late": "",
+     "route": "",
+     "dim": "",
+     "iid": "people-0a0a0da94f",
+     "last": ""
+    },
+    {
+     "id": "rest-money",
+     "kind": "money",
+     "icon": "creditcard",
+     "tint": "blue",
+     "what": "$2,341 spent this month",
+     "when": "Travel is the largest at $980",
+     "late": "",
+     "route": "",
+     "dim": "",
+     "iid": "money",
+     "last": ""
+    },
+    {
+     "id": "rest-spend",
+     "kind": "hub",
+     "icon": "cpu",
+     "tint": "amber",
+     "what": "$137.42 on models this month",
+     "when": "$5.97 a day — on track for $179 by month end",
+     "late": "",
+     "route": "/p/costs/spend",
+     "dim": "",
+     "iid": "spend",
+     "last": "1"
+    }
+   ]
   }
  ],
- "queue_more": "Show 1 more",
- "queue": [
-  {
-   "id": "mm1",
-   "icon": "envelope",
-   "what": "Maya Chen — Austin itinerary — need your dates",
-   "why": "she has asked twice",
-   "when": "",
-   "late": "",
-   "last": ""
-  },
-  {
-   "id": "tr1",
-   "icon": "checkmark.circle",
-   "what": "Renew the passport for Austin",
-   "why": "",
-   "when": "4 days late",
-   "late": "1",
-   "last": ""
-  },
-  {
-   "id": "alert-8d75282c64",
-   "icon": "lock.open",
-   "what": "Front Door is unlocked",
-   "why": "",
-   "when": "",
-   "late": "",
-   "last": ""
-  },
-  {
-   "id": "alert-3f4f948776",
-   "icon": "clock.badge.exclamationmark",
-   "what": "Nightly release is failing",
-   "why": "",
-   "when": "last ran 11:15 22 Nov",
-   "late": "",
-   "last": ""
-  },
-  {
-   "id": "alert-53a705a75b",
-   "icon": "shippingbox",
-   "what": "1 build landed, unannounced",
-   "why": "",
-   "when": "1.4.0",
-   "late": "",
-   "last": ""
-  },
-  {
-   "id": "tr2",
-   "icon": "checkmark.circle",
-   "what": "Fix light switch",
-   "why": "",
-   "when": "5 months",
-   "late": "",
-   "last": ""
-  },
-  {
-   "id": "tr3",
-   "icon": "checkmark.circle",
-   "what": "Book the Austin flights",
-   "why": "",
-   "when": "Today",
-   "late": "",
-   "last": ""
-  }
- ],
+ "brief": {
+  "focus": [
+   {
+    "id": "f0",
+    "text": "Answer Maya — she has asked twice and you fly tomorrow."
+   }
+  ],
+  "next": [
+   {
+    "id": "n0",
+    "text": "Flight to Austin, tomorrow 08:00."
+   }
+  ],
+  "age": "just now",
+  "stale": ""
+ },
  "suggestions": [
   {
    "id": "s0",

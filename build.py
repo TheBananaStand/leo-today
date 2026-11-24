@@ -91,6 +91,11 @@ descriptor = {
                 "mute": {"kind": "packageAction", "name": "mute",
                          "args": {"id": "{args.id}", "what": "{args.what}"}, "refresh": "reload"},
                 "undo": {"kind": "packageAction", "name": "undo", "refresh": "reload"},
+                # A row opens the thing itself, in the app that owns it. The
+                # route is the row's own — `/inbox?selectedId=…`,
+                # `/calendar?day=…` — handed over whole by the press.
+                "open": {"kind": "openWindow", "route": "{args.route}"},
+                "rewrite": {"kind": "packageAction", "name": "rewrite", "refresh": "reload"},
                 # Telling it it is wrong. `correct` is standing — it is handed
                 # to every rewrite from here on, not just the next one.
                 "correct": {"kind": "packageAction", "name": "correct",
