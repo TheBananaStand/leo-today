@@ -798,6 +798,14 @@ def write_brief(user, key, context):
     finally:
         with _regen_lock:
             _regen.discard((user, key))
+        # `nudge()`'s own docstring is about THIS case — "the briefing is
+        # written on a background thread, so by the time it exists the page
+        # that triggered it has already been drawn" — and it was never called
+        # from here. The first briefing sat behind "Reading your day…" until
+        # something else happened to reload the page. It matters more now
+        # that a correction drops the cache on purpose: without this, saying
+        # "that's not right" blanks the hero and leaves it blank.
+        nudge()
 
 
 def write_answer(user, question, context):

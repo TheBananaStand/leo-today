@@ -174,6 +174,21 @@ assert seen["system"].index("CORRECTED YOU") > seen["system"].index("mood"), \
     "corrections must come LAST, nearest the request"
 print("corrections  :", len(told), "standing, and they reach the writer")
 
+# A briefing written on a thread has to TELL the open page, or it sits behind
+# "Reading your day…" until something else reloads it — and a correction
+# drops the cache on purpose, so without this, saying "that's not right"
+# blanks the hero and leaves it blank.
+rang = []
+m.nudge = lambda: rang.append(1)
+m.ask_claude = lambda *a, **k: json.dumps({"headline": "h", "focus": {"what": "f", "why": ""}, "mood": "calm"})
+m.write_brief("selftest", "k3", "CONTEXT")
+assert rang, "write_brief never nudged the open page"
+rang.clear()
+m.ask_claude = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+m.write_brief("selftest", "k4", "CONTEXT")
+assert rang, "a FAILED briefing must nudge too, or the skeleton never clears"
+print("nudge        : on success and on failure")
+
 m.ui_action("uncorrect", {"id": told[0]["id"]}, "selftest")
 assert len(m.fixes("selftest")) == 1, "uncorrect did not remove exactly one"
 print("uncorrect    : one removed, one left")
