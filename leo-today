@@ -1404,20 +1404,26 @@ class Handler(BaseHTTPRequestHandler):
         not `name`/`action` as the arguments. It logs what it actually got,
         which is how the next person finds out for certain.
         """
-        if self.path.split("?")[0] != "/leo/ui/action":
+        split = urllib.parse.urlsplit(self.path)
+        if split.path != "/leo/ui/action":
             return self.send_error(404)
         try:
             n = int(self.headers.get("content-length") or 0)
             raw = self.rfile.read(n).decode() if n else "{}"
             body = json.loads(raw or "{}")
             if not isinstance(body, dict):
-                raise ValueError("not an object")
-        except Exception as e:  # noqa: BLE001
-            return self.send_error(400, f"unreadable body: {type(e).__name__}")
-        name = str(body.get("name") or body.get("action") or "")
-        args = body.get("args")
-        if not isinstance(args, dict):
-            args = {k: v for k, v in body.items() if k not in ("name", "action")}
+                body = {}
+        except Exception:  # noqa: BLE001 — the query is the real channel
+            body = {}
+        # The QUERY carries the action, because that is the half of a
+        # descriptor action the hub resolves `{…}` in. The body is read too,
+        # so a caller that sends one — curl, a test, a future hub — still works.
+        q = {k: v[0] for k, v in
+             urllib.parse.parse_qs(split.query, keep_blank_values=True).items()}
+        name = str(q.pop("name", "") or body.get("name") or body.get("action") or "")
+        args = dict(body.get("args") if isinstance(body.get("args"), dict) else
+                    {k: v for k, v in body.items() if k not in ("name", "action")})
+        args.update(q)
         user = self.headers.get("x-leo-user-id") or ""
         print(f"today: action {name!r} args={sorted(args)} user={user or '-'}", flush=True)
         try:

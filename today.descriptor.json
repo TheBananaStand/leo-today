@@ -42,31 +42,20 @@
         },
         "ask": {
           "method": "POST",
-          "path": "/api/packages/today/ui/action",
-          "body": {
-            "name": "ask",
-            "args": {
-              "text": "{args.text}"
-            }
-          },
+          "path": "/api/packages/today/ui/action?name=ask&text={args.text}",
+          "body": {},
           "refresh": "reload"
         },
         "clear": {
           "method": "POST",
-          "path": "/api/packages/today/ui/action",
-          "body": {
-            "name": "clear",
-            "args": {}
-          },
+          "path": "/api/packages/today/ui/action?name=clear",
+          "body": {},
           "refresh": "reload"
         },
         "rewrite": {
           "method": "POST",
-          "path": "/api/packages/today/ui/action",
-          "body": {
-            "name": "rewrite",
-            "args": {}
-          },
+          "path": "/api/packages/today/ui/action?name=rewrite",
+          "body": {},
           "refresh": "reload"
         },
         "refresh": {

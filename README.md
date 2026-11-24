@@ -95,11 +95,13 @@ by writing on a thread and nudging the open page, and Ask uses the same
 machinery rather than a second one. The page therefore has three Ask states —
 in flight, answered, and could-not-answer — and renders all three.
 
-**The forwarded body's shape is the hub's and is not written down anywhere on
-this box.** `do_POST` reads the action name from `name` or `action`, and takes
-anything that is not one of those as the arguments, then logs what it actually
-received. The first real press is what settles it; until then the handler is
-right either way.
+**Everything an action carries goes in the QUERY, and that is measured
+rather than chosen.** The hub resolves `{...}` in a descriptor action's `path`
+and **not** in its `body`: a first cut put the question in the body, the
+process received the literal string `{args.text}`, and the model answered
+"I'm ready to answer, but I don't see your question." `do_POST` reads the
+query first and the body second, so a caller that sends one -- curl, a test --
+still works.
 
 ## Ask
 

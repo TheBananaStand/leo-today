@@ -105,6 +105,20 @@ assert not d.get("gaps"), "every stubbed source should have answered"
 # thing a test found was that it answers from a context file the page writes,
 # so a press before a draw is a real state and not a crash.
 assert m.ui_action("nope", {}, "selftest")["ok"] is False, "an unknown action must refuse"
+
+# The query string is the channel, because `path` is the half of a descriptor
+# action the hub templates. Parse it the way the handler does, including a
+# question with the two characters that would break a naive split.
+from urllib.parse import urlsplit, parse_qs, quote
+hairy = "What about A & B? 50% done"
+url = "/leo/ui/action?name=ask&text=" + quote(hairy, safe="")
+sp = urlsplit(url)
+q = {k: v[0] for k, v in parse_qs(sp.query, keep_blank_values=True).items()}
+assert sp.path == "/leo/ui/action", sp.path
+assert q.pop("name") == "ask", q
+assert q == {"text": hairy}, q
+print("query        :", hairy, "survived & and %")
+
 assert m.ui_action("ask", {"text": ""}, "selftest")["ok"] is False, "an empty question must refuse"
 
 import time

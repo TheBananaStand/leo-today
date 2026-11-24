@@ -71,14 +71,21 @@ descriptor = {
                 # model call to a thread and returns at once. The answer
                 # arrives by `nudge()`, on the same `today` topic `refreshOn`
                 # already listens to.
-                "ask": {"method": "POST", "path": "/api/packages/today/ui/action",
-                        "body": {"name": "ask", "args": {"text": "{args.text}"}},
-                        "refresh": "reload"},
-                "clear": {"method": "POST", "path": "/api/packages/today/ui/action",
-                          "body": {"name": "clear", "args": {}}, "refresh": "reload"},
+                # MEASURED, not assumed: the hub resolves `{…}` in `path` and
+                # NOT in `body`. A first cut put the question in the body and
+                # the process received the literal string `{args.text}`, which
+                # the model then answered with "I don't see your question."
+                # Everything an action carries therefore goes in the query.
+                "ask": {"method": "POST",
+                        "path": "/api/packages/today/ui/action?name=ask&text={args.text}",
+                        "body": {}, "refresh": "reload"},
+                "clear": {"method": "POST",
+                          "path": "/api/packages/today/ui/action?name=clear",
+                          "body": {}, "refresh": "reload"},
                 # Drop the cached briefing; the next draw rebuilds it.
-                "rewrite": {"method": "POST", "path": "/api/packages/today/ui/action",
-                            "body": {"name": "rewrite", "args": {}}, "refresh": "reload"},
+                "rewrite": {"method": "POST",
+                            "path": "/api/packages/today/ui/action?name=rewrite",
+                            "body": {}, "refresh": "reload"},
                 # The way out of the "nothing answered" state, and the header's
                 # own refresh.
                 "refresh": {"method": "GET", "path": "/api/packages/today/ui/data",
