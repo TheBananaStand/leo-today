@@ -235,10 +235,21 @@ def run_sweep(plan, verdict, results):
         json.dumps([{"id": "m77", "from": "Maya Chen <maya@acme.com>", "subject": "Austin — hotel confirmation"}])
         if name == "email" and args.get("action") == "search" else BASE_TOOL(name, args, tok))
     assert m.ui_action("sweep", {"id": sid}, "selftest", "grant")["ok"]
+    # The loop exists because the payload is eventually consistent: `payload`
+    # kicks off organising under `_regen_lock` and the sweep note arrives on a
+    # later pass. The SUBJECT'S PRESENCE is eventually consistent too, and the
+    # bare `next(...)` was not retry-safe — on a pass where the list did not
+    # yet carry `sid` it raised StopIteration instead of waiting, which is a
+    # retry loop whose first step cannot be retried.
+    #
+    # Measured at ~20-30% of runs across three commits (2/10 at dfc5a63, 3/10
+    # at d8f4800, 1/10 with the clock fix) — the same failure in all three, so
+    # it predates both. A gate that flakes one run in four makes every green
+    # three-quarters of an answer.
     for _ in range(100):
         d = m.payload("grant", "selftest")
-        me = next(x for x in d["subjects"] if x["id"] == sid)
-        if me["sweep_note"]:
+        me = next((x for x in d["subjects"] if x["id"] == sid), None)
+        if me and me["sweep_note"]:
             return me
         time.sleep(0.05)
     raise AssertionError("the sweep never reported")
@@ -276,24 +287,30 @@ os.replace(m.subjects_path("selftest") + ".bak", m.subjects_path("selftest")); s
 # A record grouped under the OLD spec is re-derived once, and only once.
 # Asserted in both directions: a spec-less record loses its subjects (so the
 # person stops seeing an arrangement built to a definition they rejected),
-# and `noise`/`background`/`asked` survive (so what is marketing does not have
-# to be decided again). Without the second half the migration would be a
-# regroup wearing a migration's clothes.
-_bak = m.subjects_path("selftest") + ".mig"
-os.rename(m.subjects_path("selftest"), _bak)
+# and noise/background/asked survive (so what is marketing does not have to
+# be decided again). Without the second half this would be a regroup wearing
+# a migration's clothes.
+#
+# Its OWN user, deliberately. The first version wrote fixtures over
+# "selftest"'s record and read them straight back, which races the background
+# organiser writing the same file under _regen_lock — it failed about 1 run
+# in 10, in both directions. The behaviour under test belongs to
+# load_subjects, not to the live user, so the race is removable rather than
+# something to sleep through.
+_MU = "migprobe"
 json.dump({"seq": 7, "subjects": [{"sid": "s7", "title": "Auto loan past due", "ids": ["x1"]}],
            "noise": ["n1"], "background": ["b1"], "asked": {"a1": 2}},
-          open(m.subjects_path("selftest"), "w"))
-_mig = m.load_subjects("selftest")
+          open(m.subjects_path(_MU), "w"))
+_mig = m.load_subjects(_MU)
 assert _mig["subjects"] == [], "a record under the old spec must be re-derived, not frozen"
 assert _mig["noise"] == ["n1"] and _mig["background"] == ["b1"] and _mig["asked"] == {"a1": 2}, \
     "the migration must keep what grouping does not decide"
 assert _mig["spec"] == m.SUBJECT_SPEC
 json.dump({"seq": 7, "spec": m.SUBJECT_SPEC,
            "subjects": [{"sid": "s7", "title": "Money", "ids": ["x1"]}]},
-          open(m.subjects_path("selftest"), "w"))
-assert len(m.load_subjects("selftest")["subjects"]) == 1, "a current record must NOT be re-derived"
-os.replace(_bak, m.subjects_path("selftest"))
+          open(m.subjects_path(_MU), "w"))
+assert len(m.load_subjects(_MU)["subjects"]) == 1, "a current record must NOT be re-derived"
+os.remove(m.subjects_path(_MU))
 print("migration   : old spec re-derived once; current spec untouched")
 print("rename       : keeps its colour and its place")
 print("sweep        : offers only what was judged to belong; keep files, drop forgets; 'Work' is refused")

@@ -1850,9 +1850,20 @@ def payload(grant=None, user=""):
     timed = [e for e in evs if not e["allday"] and e["at"] >= now]
     if timed:
         nxt = timed[0]
+        # The hero draws `lead` and `time` side by side, so a phrase that
+        # already ends in the clock prints it twice: at 02:10 a meeting at
+        # 08:00 is >5h away, `lead` answers "At 08:00", and the card read
+        # "AT 08:00  08:00".
+        #
+        # The old strip fired on `date() != now.date()`, which is a PROXY for
+        # "the phrase ends in a clock" — true for "Tomorrow 08:00" and
+        # "Monday 08:00", and false for the same-day "At 08:00" that also
+        # ends in one. Keyed on the clock itself it covers all three and
+        # still leaves "Now", "Started" and "In 25 minutes" alone.
         phrase = lead(nxt["at"], now)
-        if nxt["at"].date() != now.date():
-            phrase = phrase.rsplit(" ", 1)[0]
+        _clk = clock(nxt["at"])
+        if phrase.endswith(_clk):
+            phrase = phrase[: -len(_clk)].rstrip()
         d["now"] = {"lead": phrase, "time": clock(nxt["at"]), "title": nxt["title"],
                     "route": f"/calendar?day={nxt['at'].date().isoformat()}"}
 
