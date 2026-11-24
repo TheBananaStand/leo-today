@@ -91,6 +91,12 @@ descriptor = {
                         "args": {"text": "{args.text}"}, "refresh": "reload"},
                 "clear": {"kind": "packageAction", "name": "clear",
                           "refresh": "reload"},
+                # Telling it it is wrong. `correct` is standing — it is handed
+                # to every rewrite from here on, not just the next one.
+                "correct": {"kind": "packageAction", "name": "correct",
+                            "args": {"text": "{args.text}"}, "refresh": "reload"},
+                "uncorrect": {"kind": "packageAction", "name": "uncorrect",
+                              "args": {"id": "{args.id}"}, "refresh": "reload"},
                 # Drop the cached briefing; the next draw rebuilds it.
                 "rewrite": {"kind": "packageAction", "name": "rewrite",
                             "refresh": "reload"},

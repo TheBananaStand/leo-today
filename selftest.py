@@ -151,6 +151,43 @@ for _ in range(100):
 assert got["failed"], "a refused call must say so"
 print("ask refused  :", got["failed"])
 
+# --- telling it it is wrong ------------------------------------------------
+# A correction is about the WRITER, so it has to reach the next briefing and
+# every one after it — a note that only fixes the briefing it was filed
+# against teaches the person that saying so is pointless.
+assert m.ui_action("correct", {"text": ""}, "selftest")["ok"] is False, "empty correction must refuse"
+assert m.fixes("selftest") == [], "started dirty"
+assert m.ui_action("correct", {"text": "Mike's surgery is an all-day thing, never a 9am meeting"},
+                   "selftest")["ok"]
+assert m.ui_action("correct", {"text": "Never mention model spend; I read the card"}, "selftest")["ok"]
+m.ui_action("correct", {"text": "NEVER MENTION MODEL SPEND; I READ THE CARD"}, "selftest")
+told = m.fixes("selftest")
+assert len(told) == 2, f"a correction was stored twice in different case: {told}"
+
+seen = {}
+m.ask_claude = lambda system, turns, **k: seen.setdefault("system", system) and "" or json.dumps(
+    {"headline": "h", "focus": {"what": "f", "why": ""}, "mood": "calm"})
+m.write_brief("selftest", "k", "CONTEXT")
+assert "CORRECTED YOU" in seen["system"], "corrections never reached the writer"
+assert "all-day thing" in seen["system"], seen["system"][-400:]
+assert seen["system"].index("CORRECTED YOU") > seen["system"].index("mood"), \
+    "corrections must come LAST, nearest the request"
+print("corrections  :", len(told), "standing, and they reach the writer")
+
+m.ui_action("uncorrect", {"id": told[0]["id"]}, "selftest")
+assert len(m.fixes("selftest")) == 1, "uncorrect did not remove exactly one"
+print("uncorrect    : one removed, one left")
+
+# A briefing must not carry notes any more — four shipped and every one
+# restated a row drawn elsewhere on the page.
+m.ask_claude = lambda *a, **k: json.dumps(
+    {"headline": "h", "focus": {"what": "f", "why": ""},
+     "notes": [{"what": "n", "why": "w"}], "mood": "calm"})
+m.write_brief("selftest", "k2", "CONTEXT")
+d2 = m.payload("grant", "selftest")
+assert "notes" not in (d2.get("brief") or {}), "notes came back"
+print("brief        : headline + focus, no notes")
+
 assert m.ui_action("clear", {}, "selftest")["ok"]
 assert m.answer_for("selftest", now) == (None, ""), "clear left something behind"
 print("clear        : nothing left")

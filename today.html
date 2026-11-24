@@ -202,17 +202,10 @@
             <img icon="{brief.icon}" alt="" class="size-4 md:size-5 text-tint">
           </span>
           <span class="flex-1 min-w-0 text-lg md:text-xl font-semibold">{brief.headline}</span>
-          <div class="flex flex-col items-end gap-1 shrink-0">
-            <a if="brief.age" id="rewrite" action="rewrite" aria-label="Read the day again"
-               class="flex items-center gap-1.5 h-6 px-2 -mr-2 rounded-full text-xs text-muted tabular-nums">
-              <img icon="arrow.clockwise" alt="" class="size-3">
-              <span>{brief.age}</span>
-            </a>
-            <span if="brief.stale" class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-elevated">
-              <span class="size-1.5 rounded-full bg-tint animate-pulse"></span>
-              <span class="text-xs text-secondary">rewriting</span>
-            </span>
-          </div>
+          <span if="brief.stale" class="shrink-0 flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-elevated">
+            <span class="size-1.5 rounded-full bg-tint animate-pulse"></span>
+            <span class="text-xs text-secondary">rewriting</span>
+          </span>
         </div>
 
         <!-- Where the time goes. One thing, and why that one. The glyph is
@@ -227,13 +220,51 @@
           </div>
         </div>
 
-        <!-- What to be thinking about next. -->
-        <div if="brief.notes" class="grid gap-x-6 gap-y-3 md:grid-cols-2">
-          <div each="n in brief.notes" id="bn-{n.id}" class="flex items-start gap-2.5 min-w-0">
-            <span class="size-1.5 mt-2 shrink-0 rounded-full bg-tint"></span>
-            <div class="flex flex-col gap-0.5 min-w-0 flex-1">
-              <span class="text-sm line-clamp-2">{n.what}</span>
-              <span if="n.why" class="text-xs text-muted line-clamp-2">{n.why}</span>
+        <!-- `notes` used to be here: four bullets, two lines each. Every one
+             restated a row drawn elsewhere on THIS page — the overdue tasks,
+             the failing release, the model spend, tomorrow's 08:00 — under a
+             `why` like "worth monitoring". Eight lines of hero that cost a
+             read and said nothing. The prompt had forbidden restatement for
+             months and could not win, because the lists are the only input.
+
+             What is left is a headline, one focus, and a way to say it is
+             wrong. -->
+
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <a if="brief.age" id="rewrite" action="rewrite" aria-label="Read the day again"
+             class="flex items-center gap-1.5 min-h-8 px-2 -ml-2 rounded-full text-xs text-muted tabular-nums">
+            <img icon="arrow.clockwise" alt="" class="size-3">
+            <span>{brief.age}</span>
+          </a>
+          <a if="!$.fixing" id="wrong" select="fixing=1" shortcut="w"
+             class="flex items-center min-h-8 px-3 rounded-full bg-elevated text-xs font-medium text-secondary">That's not right</a>
+          <a if="$.fixing" id="wrong-close" select="fixing=" shortcut="esc"
+             class="flex items-center min-h-8 px-3 rounded-full bg-elevated text-xs font-medium text-secondary">Done</a>
+          <span if="corrections_note" class="ml-auto shrink-0 text-xs text-muted">{corrections_note}</span>
+        </div>
+
+        <!-- Telling it it is wrong. A correction is about the WRITER, not
+             about the briefing in front of you: it is held, it is handed to
+             every rewrite from here on, and it is listed with a way out —
+             because a standing instruction you cannot see or withdraw is
+             worse than one that was never heard. -->
+        <div if="$.fixing" id="fixing" class="flex flex-col gap-3 p-4 rounded-lg bg-elevated">
+          <form id="fix" action="correct" class="flex items-center gap-2">
+            <input id="fix-field" bind="form.fix" required autofocus
+                   placeholder="What did it get wrong?"
+                   class="flex-1 max-w-2xl h-10 min-w-0">
+            <button id="fix-save" action="correct" args="text={$.form.fix}"
+                    disabled="!$.form.fix"
+                    class="shrink-0 h-10 px-4 rounded-lg bg-accent text-on-accent">Save</button>
+          </form>
+          <span if="!corrections" class="text-xs text-muted">It holds this the next time it writes the day, and every time after.</span>
+          <div if="corrections" class="flex flex-col">
+            <div each="c in corrections" id="c-{c.id}" class="flex items-center gap-1 min-h-9">
+              <span class="min-w-0 max-w-2xl text-sm text-secondary line-clamp-2">{c.text}</span>
+              <a id="unfix-{c.id}" action="uncorrect" args="id={c.id}" aria-label="Forget this correction"
+                 class="shrink-0 size-9 flex items-center justify-center rounded-full">
+                <img icon="xmark" alt="" class="size-3.5 text-muted">
+              </a>
             </div>
           </div>
         </div>
@@ -307,7 +338,7 @@
             <span class="text-xs font-semibold text-tint">{f.initials}</span>
           </span>
         </div>
-        <a if="now.join" id="join" action="ask" args="text={now.join_ask}" shortcut="enter"
+        <a if="now.join" id="join" action="ask" args="text={now.join_ask}"
            class="shrink-0 h-10 px-5 flex items-center rounded-lg text-sm font-semibold bg-accent text-on-accent">{now.join}</a>
       </header>
     </section>
@@ -456,7 +487,7 @@
           <div class="flex items-start gap-3">
             <span class="flex-1 min-w-0 text-sm font-semibold line-clamp-2">{answer.question}</span>
             <span class="shrink-0 text-xs text-muted tabular-nums">{answer.age}</span>
-            <a id="clear-answer" action="clear" aria-label="Clear this answer" shortcut="esc"
+            <a id="clear-answer" action="clear" aria-label="Clear this answer"
                class="shrink-0 size-9 -mr-2 -my-1 flex items-center justify-center rounded-full">
               <img icon="xmark" alt="" class="size-3.5 text-muted">
             </a>
@@ -479,7 +510,7 @@
         <form id="compose" action="ask" class="flex items-center gap-2 pt-4">
           <input id="ask-field" bind="form.message" placeholder="Ask about today" shortcut="/" required
                  class="flex-1 max-w-2xl h-10 min-w-0">
-          <button id="ask-send" action="ask" args="text={$.form.message}" shortcut="enter"
+          <button id="ask-send" action="ask" args="text={$.form.message}"
                   disabled="!$.form.message"
                   class="shrink-0 h-10 px-5 rounded-lg bg-accent text-on-accent">Ask</button>
         </form>

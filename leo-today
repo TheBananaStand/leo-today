@@ -607,6 +607,7 @@ _regen_lock = threading.Lock()
 # is written by a thread that may outlive the request, and because a restart
 # between the press and the answer should cost a re-ask, not a crash.
 ASK_DIR = os.path.join(DATA, "ask")
+FIX_DIR = os.path.join(DATA, "fixes")
 _asking = set()
 _ask_lock = threading.Lock()
 
@@ -633,20 +634,30 @@ BRIEF_SYSTEM = """You write one person's daily briefing inside their own assista
 You are given everything their hub knows about today. Answer ONLY with JSON:
 
 {"headline": "...", "focus": {"what": "...", "why": "..."},
- "notes": [{"what": "...", "why": "..."}], "mood": "calm|busy|behind"}
+ "mood": "calm|busy|behind"}
 
 - headline: ONE sentence on the state of the day. Concrete. Name real things.
   Not "you have a busy day" — "Three meetings before noon, then the afternoon
   is yours."
-- focus: the single thing worth their attention today, and why it is that
+- focus: the single thing worth their attention today, and why it is THAT
   one rather than another. Prefer something with a deadline, someone waiting,
   or a consequence. If nothing deserves it, say so in `what` and leave `why`
   empty.
-- notes: up to four things to KNOW or to be thinking about next — something
-  coming, something that has gone quiet, something that will become a problem.
-  Not a restatement of the lists; they can already see those.
 - mood: `behind` if things are overdue or someone is waiting, `busy` if the
   day is full, `calm` otherwise.
+
+EVERY LINE BELOW IS ALREADY DRAWN ON THE PAGE AROUND YOU. The person can see
+their calendar, their overdue tasks, what the house is doing and what the
+models cost — in full, in their own blocks, a few inches from what you write.
+Restating one of them is worse than silence, because it costs them a read and
+tells them nothing. You are two sentences on a page of facts: say what the
+facts MEAN together, or say very little.
+
+`why` earns its place or it does not exist. "This needs attention before it
+becomes a problem", "worth monitoring", "it's your first thing tomorrow" and
+"the hub has a problem that needs visibility" are not reasons — they are the
+shape of a reason with nothing inside it. If you cannot say something the
+person does not already know, leave `why` empty.
 
 Each block below is a SEPARATE subject. Never join facts from two blocks
 into one sentence — a person's location and a failing job on the hub have
@@ -674,6 +685,38 @@ def ask_path(user, ext="json"):
     return os.path.join(ASK_DIR, f"{safe_user(user)}.{ext}")
 
 
+def fixes_path(user):
+    os.makedirs(FIX_DIR, exist_ok=True)
+    return os.path.join(FIX_DIR, f"{safe_user(user)}.json")
+
+
+def fixes(user):
+    """What this person has told the briefing it got wrong.
+
+    Standing, not per-briefing: a correction is about the WRITER, so it has
+    to outlive the thing it corrected or the same mistake arrives tomorrow
+    and the person learns that saying so is pointless.
+    """
+    try:
+        held = json.load(open(fixes_path(user)))
+        return [f for f in held if isinstance(f, dict) and f.get("text")][:12]
+    except Exception:  # noqa: BLE001 — nobody has corrected anything yet
+        return []
+
+
+def add_fix(user, text):
+    held = fixes(user)
+    if any(f["text"].lower() == text.lower() for f in held):
+        return
+    held.insert(0, {"id": hashlib.sha1(text.encode()).hexdigest()[:10], "text": text})
+    json.dump(held[:12], open(fixes_path(user), "w"))
+
+
+def drop_fix(user, fid):
+    json.dump([f for f in fixes(user) if f["id"] != fid],
+              open(fixes_path(user), "w"))
+
+
 def digest_of(items, evs):
     """What the briefing is ABOUT, as one string.
 
@@ -691,11 +734,20 @@ def context_for(items, evs, now, extras):
     out = []
     today = [e for e in evs if e["at"].date() == now.date()]
     if today:
-        out.append("TODAY'S CALENDAR:")
+        out.append(f"TODAY'S CALENDAR (it is {clock(now)} now):")
         for e in today:
-            mark = "(done)" if e["at"] + timedelta(minutes=e["mins"]) < now else ""
-            out.append(f"- {clock(e['at'])} {e['title']}"
-                       + (f" at {e['where']}" if e["where"] else "") + f" {mark}".rstrip())
+            # An all-day item has no clock and cannot be "happening now".
+            # Writing one as `09:00` with no done-mark is what produced
+            # "Mike's surgery at 9 AM is happening now" at twenty to six.
+            if e["allday"]:
+                out.append(f"- all day: {e['title']}"
+                           + (f" at {e['where']}" if e["where"] else ""))
+                continue
+            ends = e["at"] + timedelta(minutes=e["mins"])
+            mark = "(finished)" if ends < now else (
+                "(HAPPENING NOW)" if e["at"] <= now else "(still to come)")
+            out.append(f"- {clock(e['at'])}-{clock(ends)} {e['title']}"
+                       + (f" at {e['where']}" if e["where"] else "") + f" {mark}")
     later = [e for e in evs if e["at"].date() > now.date()]
     if later:
         out.append("\nTOMORROW:")
@@ -720,7 +772,17 @@ def context_for(items, evs, now, extras):
 def write_brief(user, key, context):
     """Ask for the briefing and file it. Runs OFF the request path."""
     try:
-        answer = ask_claude(BRIEF_SYSTEM, [{"role": "user", "content": context}],
+        system = BRIEF_SYSTEM
+        told = fixes(user)
+        if told:
+            # Last, so it is the nearest thing to the request, and phrased as
+            # a rule rather than as information — a correction that reads as
+            # one more fact gets weighed against the facts and loses.
+            system += ("\nTHIS PERSON HAS CORRECTED YOU. These are standing "
+                       "instructions and they OVERRIDE anything you infer "
+                       "below:\n"
+                       + "\n".join(f"- {f['text']}" for f in told) + "\n")
+        answer = ask_claude(system, [{"role": "user", "content": context}],
                             work="periodic_check", max_tokens=600)
         text = answer.strip()
         if text.startswith("```"):
@@ -820,6 +882,26 @@ def ui_action(name, args, user):
     if name == "clear":
         try:
             os.remove(ask_path(user))
+        except OSError:
+            pass
+        return {"ok": True}
+    if name == "correct":
+        text = str(args.get("text") or "").strip()[:200]
+        if not text:
+            return {"ok": False, "error": "nothing to correct"}
+        add_fix(user, text)
+        # Drop the cached briefing: a correction that does not visibly change
+        # anything until the digest happens to move is a correction the
+        # person has no reason to believe was heard.
+        try:
+            os.remove(brief_path(user))
+        except OSError:
+            pass
+        return {"ok": True}
+    if name == "uncorrect":
+        drop_fix(user, str(args.get("id") or ""))
+        try:
+            os.remove(brief_path(user))
         except OSError:
             pass
         return {"ok": True}
@@ -1352,13 +1434,22 @@ def payload(grant=None, user=""):
         mood = str(br.get("mood") or "calm").lower()
         br["tint"] = {"behind": "red", "busy": "amber"}.get(mood, "green")
         br["icon"] = {"behind": "exclamationmark.triangle", "busy": "flame"}.get(mood, "sun.max")
-        told = [n for n in (br.get("notes") or []) if isinstance(n, dict) and n.get("what")]
-        br["notes"] = [{"id": f"bn{i}", "what": str(n.get("what"))[:160],
-                        "why": str(n.get("why") or "")[:200]} for i, n in enumerate(told[:4])]
+        # No `notes`. Four of them shipped, and every one restated a row
+        # drawn elsewhere on this page — the overdue tasks, the failing
+        # release, the model spend, tomorrow's 08:00 — each under a `why`
+        # like "worth monitoring". The prompt forbade restatement and could
+        # not win: the lists are the only input, so a model asked for
+        # something that is not them has nowhere to go.
+        br.pop("notes", None)
         focus = br.get("focus") if isinstance(br.get("focus"), dict) else {}
         br["focus"] = {"what": str(focus.get("what") or "")[:140],
                        "why": str(focus.get("why") or "")[:240]}
         d["brief"] = br
+
+    told = fixes(user)
+    if told:
+        d["corrections"] = told
+        d["corrections_note"] = plural(len(told), "correction")
 
     answer, pending = answer_for(user, now)
     if answer:
