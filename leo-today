@@ -640,36 +640,36 @@ into one sentence.
 
 ORGANISE_SYSTEM = """You organise one person's day, inside their own assistant.
 
-You are given EVERYTHING their hub knows right now — messages, calendar,
-reminders, the house, the hub itself, money — one item per line, each with an
-id. They do not want to open five apps. Turn it into the bigger picture.
+They do not want to open five apps, and they do not want the page to move
+under them. So the subjects they already have are FIXED: you never rename,
+merge, reorder or empty one, and you never move an item that is already in
+one. Your work is only what is new, and the words.
 
 Answer ONLY with JSON:
 
 {"focus": ["..."], "next": ["..."],
- "subjects": [{"title": "...", "state": "...", "ids": ["..."]}]}
+ "place": [{"id": "...", "into": "s3"}, {"id": "...", "new": "Title"}],
+ "states": {"s3": "...", "Title": "..."}}
 
-- subjects: group the items by what they are ABOUT, across sources — a person,
-  a project, a trip, the house, work, money. A message, a reminder and a
-  meeting about the same thing belong together. THREE TO FIVE subjects.
-  The point is the bigger picture, so a subject of ONE item is a failure
-  unless that item truly stands alone and matters: when things are not about
-  the same specific thing, group them by the part of life they belong to
-  ("Work", "Family", "Around the house", "Leo hub"). Finished meetings and
-  small facts go with their area too — they are context, not clutter.
-    title: the person's own noun for it, four words at most. Never a source
-           name ("Email", "Calendar", "Reminders").
-    state: where it stands, in one line of fourteen words at most.
-    ids:   every id below goes in EXACTLY one subject. Drop none. Most
-           pressing first. Order the subjects most pressing first too.
-- focus: what needs them now — at most three lines, twelve words each, most
-  important first. A person waiting beats a deadline beats a chore.
+- place: one entry for EVERY id under NEW ITEMS, and for nothing else.
+    into: the id of an existing subject it belongs with — prefer this.
+    new:  a title for a new subject, four words at most, the person's own
+          noun for it; never a source name ("Email", "Calendar"). Give the
+          same title to new items that belong together. When items are not
+          about one specific thing, use the part of life they belong to
+          ("Work", "Family", "Around the house", "Leo hub") — a subject of
+          one item is a failure unless it truly stands alone and matters.
+          Aim for three to five subjects in all.
+- states: for every subject, existing (by id) and new (by title), where it
+  stands in one line of fourteen words at most.
+- focus: what needs them now — at most three lines, twelve words each. A
+  person waiting beats a deadline beats a chore.
 - next: what is coming up in the next day or so — at most three lines,
   twelve words each, each with its time or day.
 
-An item marked (finished) is over: never say it is happening. An all-day item
-has no clock. Never invent a fact that is not below. No filler: "needs
-attention" and "worth monitoring" say nothing.
+"LATE" means already overdue by the time shown — never "due in". An item
+marked (finished) is over. An all-day item has no clock. Never invent a fact.
+No filler: "needs attention" and "worth monitoring" say nothing.
 """
 
 
@@ -772,54 +772,104 @@ def context_for(items, evs, now, extras):
     return "\n".join(out)
 
 
-def write_brief(user, key, context):
-    """Ask for the summary and the subjects, and file them. OFF the request path."""
+def subjects_path(user):
+    os.makedirs(SUBJ_DIR, exist_ok=True)
+    return os.path.join(SUBJ_DIR, f"{safe_user(user)}.json")
+
+
+def load_subjects(user):
+    """The person's subjects, in the order they were made. THE STABLE THING.
+
+    The first cut regrouped everything from scratch whenever anything
+    changed — one new message, a phone moving a street — and came back with
+    new titles, a new order and new colours every time. A page you cannot
+    keep your place on is worse than five apps. So this is a record, not a
+    cache: a subject keeps its id, title and position, an item stays where it
+    was put, and the model is only ever asked about what is new.
+    """
+    try:
+        st = json.load(open(subjects_path(user)))
+        subs = [x for x in st.get("subjects") or [] if x.get("sid") and x.get("title")]
+        return {"seq": int(st.get("seq") or len(subs)), "subjects": subs}
+    except Exception:  # noqa: BLE001 — nothing grouped yet
+        return {"seq": 0, "subjects": []}
+
+
+def apply_places(user, places, allowed):
+    """File the model's placements. It may add to a subject or open one; it
+    cannot move, rename or reorder. Returns {title-or-sid: sid}."""
+    st = load_subjects(user)
+    by_sid = {x["sid"]: x for x in st["subjects"]}
+    by_title = {x["title"].lower(): x for x in st["subjects"]}
+    taken = {i for x in st["subjects"] for i in x["ids"]}
+    names = {x["sid"]: x["sid"] for x in st["subjects"]}
+    names.update({x["title"]: x["sid"] for x in st["subjects"]})   # a state may name either
+    for pl in places:
+        iid = str(pl.get("id") or "")
+        if iid not in allowed or iid in taken:
+            continue                       # invented, or already has a home
+        home = by_sid.get(str(pl.get("into") or ""))
+        title = str(pl.get("new") or "").strip()[:40]
+        if not home and title:
+            home = by_title.get(title.lower())
+            if not home:
+                st["seq"] += 1
+                home = {"sid": f"s{st['seq']}", "title": title, "ids": []}
+                st["subjects"].insert(0, home)   # new news goes on top; nothing else moves
+                by_sid[home["sid"]] = by_title[title.lower()] = home
+            names[title] = home["sid"]
+        if home:
+            home["ids"].append(iid)
+            taken.add(iid)
+    for x in st["subjects"]:
+        x["ids"] = x["ids"][-200:]
+    json.dump(st, open(subjects_path(user), "w"))
+    return names
+
+
+def write_brief(user, key, context, new_ids=()):
+    """Ask for the summary, and a home for what is new. OFF the request path."""
     try:
         system = ORGANISE_SYSTEM
         told = fixes(user)
         if told:
-            # Last, so it is the nearest thing to the request, and phrased as
-            # a rule rather than as information — a correction that reads as
-            # one more fact gets weighed against the facts and loses.
             system += ("\nTHIS PERSON'S STANDING RULES. They OVERRIDE your own "
                        "judgment:\n" + "\n".join(f"- {f['text']}" for f in told) + "\n")
+
         def asked(turns):
             text = ask_claude(system, turns, work="periodic_check", max_tokens=1100).strip()
             return text, json.loads(text[text.index("{"):text.rindex("}") + 1])
 
         turns = [{"role": "user", "content": context}]
         text, data = asked(turns)
-        # MEASURED on the owner's real day: told "three to five subjects, a
-        # subject of one item is a failure", the model returned six, five of
-        # them holding one item — so title, state and row said the same thing
-        # three times. Being told once in the prompt is not enough; being
-        # shown its own answer and the count is. One retry, then accept.
-        solo = [x for x in (data.get("subjects") or [])
-                if isinstance(x, dict) and len(x.get("ids") or []) == 1]
+        # MEASURED on the owner's real day: asked for three to five subjects,
+        # the model returned six with five holding one item. Shown its own
+        # answer and the count, it merges. One retry, then accept.
+        fresh = [str(pl.get("new") or "").strip().lower() for pl in (data.get("place") or [])
+                 if isinstance(pl, dict) and pl.get("new")]
+        solo = [t for t in set(fresh) if fresh.count(t) == 1]
         if len(solo) > 1:
             try:
                 text, data = asked(turns + [
                     {"role": "assistant", "content": text},
                     {"role": "user", "content":
-                        f"{len(solo)} of your subjects hold a single item. That is a list "
-                        "with headings, not a picture. Merge them into at most four subjects "
-                        "by the part of life they belong to — work, family and people, the "
-                        "house, money — keeping every id. Answer with the full JSON again."}])
+                        f"{len(solo)} of your new subjects hold a single item. That is a list "
+                        "with headings, not a picture. Merge the new ones into at most four, by "
+                        "the part of life they belong to, or place them in existing subjects. "
+                        "Answer with the full JSON again."}])
             except Exception as e:  # noqa: BLE001 — keep the first answer
                 print(f"today: regroup failed, keeping the first: {type(e).__name__}", flush=True)
         lines = lambda v: [str(x).strip()[:120] for x in (v or []) if str(x).strip()][:3]  # noqa: E731
-        subjects_ = [{"title": str(x.get("title") or "").strip()[:40],
-                      "state": str(x.get("state") or "").strip()[:140],
-                      "ids": [str(i) for i in (x.get("ids") or [])]}
-                     for x in (data.get("subjects") or []) if isinstance(x, dict) and x.get("title")]
-        if not subjects_ and not lines(data.get("focus")):
-            raise ValueError("neither subjects nor focus")
         with _regen_lock:
+            names = apply_places(user, [pl for pl in (data.get("place") or []) if isinstance(pl, dict)],
+                                 set(new_ids))
+            states = {names.get(str(k), str(k)): str(v).strip()[:140]
+                      for k, v in (data.get("states") or {}).items()}
             json.dump({"digest": key, "focus": lines(data.get("focus")),
-                       "next": lines(data.get("next")), "subjects": subjects_[:8],
+                       "next": lines(data.get("next")), "states": states,
                        "at": datetime.now().isoformat(timespec="minutes")},
                       open(brief_path(user), "w"))
-    except Exception as e:  # noqa: BLE001 — costs the grouping, not the page
+    except Exception as e:  # noqa: BLE001 — costs the words, not the page
         print(f"today: organising failed: {type(e).__name__}: {e}", flush=True)
     finally:
         with _regen_lock:
@@ -969,12 +1019,12 @@ def ui_action(name, args, user):
     return {"ok": False, "error": f"no such action: {name}"}
 
 
-def organised(user, has_items, key, context, now):
-    """The filed summary and subjects, and a rewrite behind the page when the
-    day has moved. Served stale meanwhile — it never blanks."""
+def organised(user, has_items, key, context, now, new_ids=()):
+    """The filed summary, and a rewrite behind the page when the day has
+    moved. Served stale meanwhile — it never blanks."""
     try:
         held = json.load(open(brief_path(user)))
-        if not isinstance(held.get("subjects"), list):
+        if not isinstance(held.get("states"), dict):
             held = None
     except Exception:  # noqa: BLE001
         held = None
@@ -984,7 +1034,7 @@ def organised(user, has_items, key, context, now):
             if (user, key) not in _regen:
                 _regen.add((user, key))
                 threading.Thread(target=write_brief, daemon=True,
-                                 args=(user, key, context)).start()
+                                 args=(user, key, context, tuple(new_ids))).start()
     if held:
         written = when(held.get("at"))
         mins = int((now - written).total_seconds() // 60) if written else 0
@@ -1003,6 +1053,7 @@ def organised(user, has_items, key, context, now):
 # state lives here, per person, and every verb can be undone.
 
 STATE_DIR = os.path.join(DATA, "state")
+SUBJ_DIR = os.path.join(DATA, "subjects")
 
 
 def state_path(user):
@@ -1491,46 +1542,59 @@ def payload(grant=None, user=""):
         d["now"] = {"lead": phrase, "time": clock(nxt["at"]), "title": nxt["title"],
                     "route": f"/calendar?day={nxt['at'].date().isoformat()}"}
 
-    # ---- what the model is told: every line, with its id ------------------
-    items = [{"id": x["id"], "kind": x["kind"], "text": x["what"], "when": x["when"],
-              "late": x["late"]} for x in things if x["kind"] != "event"]
+    # ---- what the model is told: the fixed subjects, and what is new -------
+    record = load_subjects(user)
+    by_id = {x["id"]: x for x in things}
+    homed = {i for sub_ in record["subjects"] for i in sub_["ids"]}
+    fresh = [x for x in things if x["id"] not in homed]
+    line = lambda x: (f"{x['id']} | {x['kind']} | {x['what']} | {x['when'] or '-'}"   # noqa: E731
+                      + (" | LATE (overdue by this long)" if x["late"] else "")
+                      + (" | (finished)" if x["dim"] else ""))
+    # What the summary is ABOUT. Deliberately not everything: where a phone
+    # is and what the meter reads change by the minute, and a digest that
+    # moved with them rewrote the page every time somebody crossed a street.
+    steady = [{"id": x["id"], "kind": x["kind"], "late": x["late"]} for x in things
+              if x["kind"] not in ("people", "money", "event") and x["id"] != "spend"]
     extras = []
     if got.get("weather"):
         w = got["weather"]
-        extras.append(f"WEATHER: {w['temp']} {w['condition']}, {w['range']}.")
+        extras.append(f"WEATHER: {w['temp']}, {w['range']}.")
     if gaps:
         extras.append("NOT AVAILABLE RIGHT NOW: " + "; ".join(g["id"] for g in gaps) + ".")
-    ctx = ("EVERY ITEM — `id | source | what | when`:\n"
-           + "\n".join(f"{x['id']} | {x['kind']} | {x['what']} | {x['when'] or '-'}"
-                        + (" | LATE" if x["late"] else "") + (" | (finished)" if x["dim"] else "")
-                        for x in things)
+    ctx = ("EXISTING SUBJECTS — fixed; `id | title`, then what is in each:\n"
+           + ("\n".join(f"{sub_['sid']} | {sub_['title']}\n"
+                         + "\n".join("    " + line(by_id[i]) for i in sub_["ids"] if i in by_id)
+                         for sub_ in record["subjects"]
+                         if any(i in by_id for i in sub_["ids"])) or "(none yet)")
+           + "\n\nNEW ITEMS — place every one (`id | source | what | when`):\n"
+           + ("\n".join(line(x) for x in fresh) or "(none)")
            + "\n\n" + context_for([], evs, now, extras))
     try:
         open(ask_path(user, "ctx"), "w").write(ctx)   # Ask answers from the same facts
     except Exception as e:  # noqa: BLE001 — Ask degrades, the page does not
         print(f"today: could not file the context: {type(e).__name__}", flush=True)
 
-    held = organised(user, bool(things), digest_of(items, evs), ctx, now)
+    held = organised(user, bool(things), digest_of(steady, evs), ctx, now,
+                     [x["id"] for x in fresh])
 
-    # ---- subjects: the model's grouping, over the hub's own rows -----------
-    by_id = {x["id"]: x for x in things}
-    placed, subjects_ = set(), []
-    for n, sub_ in enumerate((held or {}).get("subjects") or []):
-        members = [by_id[i] for i in sub_["ids"] if i in by_id and i not in placed]
-        placed.update(x["id"] for x in members)
+    # ---- subjects: read from the record, in the record's order -------------
+    states = (held or {}).get("states") or {}
+    subjects_ = []
+    for sub_ in record["subjects"]:
+        members = [by_id[i] for i in sub_["ids"] if i in by_id]
         if members:
             kinds = [x["kind"] for x in members]
             lead_ = max(set(kinds), key=kinds.count)
-            subjects_.append({"id": f"s{n}", "title": sub_["title"], "state": sub_["state"],
-                              "tint": hue(sub_["title"]), "icon": SUBJECT_ICON.get(lead_, "square.stack"),
-                              "note": plural(len(members), "item"), "count": str(len(members)), "rows": members})
-    loose = [x for x in things if x["id"] not in placed]
-    if loose:
-        # Arrived since the grouping was written — or there is no grouping yet.
-        subjects_.append({"id": "rest", "title": "Not sorted yet" if held else "Everything",
-                          "state": "New since the last look." if held else "Sorting your day into subjects…",
-                          "tint": "gray", "icon": "tray", "note": plural(len(loose), "item"), "count": str(len(loose)),
-                          "rows": loose})
+            subjects_.append({"id": sub_["sid"], "title": sub_["title"],
+                              "state": states.get(sub_["sid"], ""),
+                              "tint": hue(sub_["sid"]), "icon": SUBJECT_ICON.get(lead_, "square.stack"),
+                              "note": plural(len(members), "item"), "count": str(len(members)),
+                              "rows": members})
+    if fresh:
+        # Not yet placed. On top, under one fixed name, until the model files it.
+        subjects_.insert(0, {"id": "new", "title": "New", "state": "Being sorted into your subjects…",
+                             "tint": "gray", "icon": "tray", "note": plural(len(fresh), "item"),
+                             "count": str(len(fresh)), "rows": fresh})
     for sub_ in subjects_:
         sub_["rows"] = mark_last([dict(x, id=f"{sub_['id']}-{x['id']}", iid=x["id"]) for x in sub_["rows"]])
     if subjects_:
@@ -1567,7 +1631,7 @@ def payload(grant=None, user=""):
         d["asking"] = pending
 
     d["suggestions"] = suggestions([], tks)
-    note = changed_since(user, [i["id"] for i in items])
+    note = changed_since(user, [x["id"] for x in steady])
     if note:
         d["changed"] = note
     if gaps:
