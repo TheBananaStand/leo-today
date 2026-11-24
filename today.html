@@ -28,6 +28,9 @@
         <span if="!s.late" class="shrink-0 text-xs text-muted tabular-nums">{s.when}</span>
       </div>
       <span if="!s.last" class="ml-6 border-t"></span>
+      <menu>
+        <a id="s-ask-{s.id}" action="ask" args="text='What is this about — {s.what}'">Ask about this</a>
+      </menu>
     </li>
   </template>
 
@@ -75,7 +78,8 @@
       <div class="flex items-center gap-1 min-h-11 px-3">
         <span class="flex items-center justify-center shrink-0 size-11">
           <input type="checkbox" id="tick-{x.id}" checked="{x.done}" change="complete"
-                 args="id={x.id}" shortcut="e" aria-label="Tick off {x.what}">
+                 args="id={x.id}" shortcut="e" advance="loose_sel"
+                 aria-label="Tick off {x.what}">
         </span>
         <a id="pick-{x.id}" select="loose_sel={x.id}" selected="loose_sel={x.id}"
            class="flex items-center gap-3 flex-1 min-w-0 min-h-11 px-1 rounded-lg selected:bg-accent-wash">
@@ -86,6 +90,15 @@
         </a>
       </div>
       <span if="!x.last" class="ml-14 border-t"></span>
+      <!-- The Mac shows these on a right-click and the phone on a long press;
+           the first on a side also fires on a full swipe. The tick is in here
+           as well as in the row, because a swipe is how a phone does this and
+           a 44pt box is how a pointer does. -->
+      <menu>
+        <a id="l-tick-{x.id}" action="complete" args="id={x.id}" swipe="trailing">Tick off</a>
+        <a id="l-ask-{x.id}" action="ask" args="text='What should I do about this — {x.what}'"
+           swipe="leading">Ask about this</a>
+      </menu>
     </li>
   </template>
 
@@ -103,11 +116,13 @@
       </div>
       <div class="flex flex-col gap-1 min-w-0 flex-1 pb-4">
         <span if="m.free" class="text-xs text-muted italic">{m.what}</span>
-        <div if="!m.free" class="flex items-center gap-2 min-w-0">
+        <a if="!m.free" id="ev-{m.id}" action="ask"
+           args="text='What is this about — {m.title}'"
+           class="flex items-center gap-2 min-w-0 -mx-1 px-1 rounded">
           <span if="!m.done" class="flex-1 min-w-0 text-sm truncate">{m.title}</span>
           <span if="m.done" class="flex-1 min-w-0 text-sm text-muted truncate">{m.title}</span>
           <span if="m.live" class="shrink-0 px-2 py-0.5 rounded-full text-xs font-medium bg-accent-wash text-accent">Now</span>
-        </div>
+        </a>
         <div if="m.leave" class="flex items-center gap-1.5">
           <img icon="figure.walk" alt="" tint="amber" class="size-3 shrink-0 text-tint">
           <span tint="amber" class="text-xs text-tint tabular-nums">{m.leave}</span>
@@ -188,7 +203,11 @@
           </span>
           <span class="flex-1 min-w-0 text-lg md:text-xl font-semibold">{brief.headline}</span>
           <div class="flex flex-col items-end gap-1 shrink-0">
-            <span if="brief.age" class="text-xs text-muted tabular-nums">{brief.age}</span>
+            <a if="brief.age" id="rewrite" action="rewrite" aria-label="Read the day again"
+               class="flex items-center gap-1.5 h-6 px-2 -mr-2 rounded-full text-xs text-muted tabular-nums">
+              <img icon="arrow.clockwise" alt="" class="size-3">
+              <span>{brief.age}</span>
+            </a>
             <span if="brief.stale" class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-elevated">
               <span class="size-1.5 rounded-full bg-tint animate-pulse"></span>
               <span class="text-xs text-secondary">rewriting</span>
@@ -337,7 +356,15 @@
           </div>
           <ul keys="loose_sel" class="flex flex-col rounded-xl bg-surface overflow-hidden">
             <use template="loose" each="x in loose"></use>
+            <use template="loose" each="x in loose_rest" if="$.loose_open"></use>
           </ul>
+          <!-- The count used to be the end of the list. It is the lid now. -->
+          <div if="loose_more" class="flex">
+            <a if="!$.loose_open" id="loose-open" select="loose_open=1" shortcut="m"
+               class="min-h-10 px-3 flex items-center rounded-lg text-sm font-medium text-secondary">{loose_more}</a>
+            <a if="$.loose_open" id="loose-close" select="loose_open=" shortcut="m"
+               class="min-h-10 px-3 flex items-center rounded-lg text-sm font-medium text-secondary">Show less</a>
+          </div>
           <!-- Why nothing clustered into a thread. It used to live inside the
                header of this section, which is gated on there BEING loose
                ends — so the sentence explaining an empty page was unreachable
@@ -410,14 +437,50 @@
     <section if="!nothing_worked" id="ask" class="flex flex-col gap-3">
       <h2 class="text-xs font-semibold text-secondary uppercase">Ask</h2>
       <div class="flex flex-col p-4 rounded-xl bg-surface">
+
+        <!-- The answer, when there is one. A press files the question and the
+             model call runs off the request path, so this card has three
+             states and the page never waits on one of them: a question in
+             flight, an answer, and an answer that could not be written.
+
+             `nudge()` is what brings the page back when the answer lands —
+             the same channel the briefing already uses, so there is one way
+             this page gets late news rather than two. -->
+        <div if="asking" id="asking" class="flex items-center gap-3 min-h-11 pb-4 border-b">
+          <span class="size-1.5 shrink-0 rounded-full bg-accent animate-pulse"></span>
+          <span class="min-w-0 max-w-prose text-sm text-secondary truncate">{asking}</span>
+          <span class="shrink-0 text-xs text-muted">thinking…</span>
+        </div>
+
+        <div if="answer" id="answer" class="flex flex-col gap-2 pb-4 border-b">
+          <div class="flex items-start gap-3">
+            <span class="flex-1 min-w-0 text-sm font-semibold line-clamp-2">{answer.question}</span>
+            <span class="shrink-0 text-xs text-muted tabular-nums">{answer.age}</span>
+            <a id="clear-answer" action="clear" aria-label="Clear this answer" shortcut="esc"
+               class="shrink-0 size-9 -mr-2 -my-1 flex items-center justify-center rounded-full">
+              <img icon="xmark" alt="" class="size-3.5 text-muted">
+            </a>
+          </div>
+          <markdown if="answer.text" class="max-w-prose text-sm select-text">{answer.text}</markdown>
+          <div if="answer.failed" class="flex flex-wrap items-center gap-3">
+            <div class="flex items-center gap-2 min-w-0">
+              <img icon="exclamationmark.triangle" alt="" tint="amber" class="size-3.5 shrink-0 text-tint">
+              <span class="min-w-0 text-xs text-muted truncate">Couldn't answer — {answer.failed}</span>
+            </div>
+            <a id="ask-again" action="ask" args="text={answer.question}"
+               class="shrink-0 min-h-9 px-3 flex items-center rounded-lg text-sm font-medium bg-elevated">Try again</a>
+          </div>
+        </div>
+
         <div if="suggestions" class="flex flex-wrap items-center gap-2 pb-4 border-b">
           <a each="s in suggestions" id="sg-{s.id}" action="ask" args="text={s.text}"
              class="min-h-10 px-3.5 flex items-center shrink-0 rounded-full text-sm font-medium bg-elevated">{s.text}</a>
         </div>
         <form id="compose" action="ask" class="flex items-center gap-2 pt-4">
-          <input bind="form.message" placeholder="Ask about today" shortcut="/" required
+          <input id="ask-field" bind="form.message" placeholder="Ask about today" shortcut="/" required
                  class="flex-1 max-w-2xl h-10 min-w-0">
-          <button action="ask" args="text={$.form.message}" shortcut="enter" disabled="!$.form.message"
+          <button id="ask-send" action="ask" args="text={$.form.message}" shortcut="enter"
+                  disabled="!$.form.message"
                   class="shrink-0 h-10 px-5 rounded-lg bg-accent text-on-accent">Ask</button>
         </form>
       </div>

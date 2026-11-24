@@ -586,6 +586,32 @@ BRIEF_DIR = os.path.join(DATA, "brief")
 _regen = set()
 _regen_lock = threading.Lock()
 
+# One question in flight per person, and the context their last page was
+# drawn from. The context is on DISK rather than in a dict because the answer
+# is written by a thread that may outlive the request, and because a restart
+# between the press and the answer should cost a re-ask, not a crash.
+ASK_DIR = os.path.join(DATA, "ask")
+_asking = set()
+_ask_lock = threading.Lock()
+
+ASK_SYSTEM = """You answer one question about one person's day, inside their
+own assistant. You are given everything their hub knows about today, then
+their question.
+
+- Answer the question that was asked. Two or three sentences unless they
+  asked for a list, in which case give a short one.
+- Use ONLY what is below. If the answer is not there, say which part of it
+  you cannot see — "nothing in the calendar says where that is" — rather
+  than guessing or apologising.
+- Name real things: times, people, amounts. Never "you have several items".
+- No preamble. Do not restate the question. Do not offer to help further.
+- Markdown is allowed for a list or for emphasis, and is not wanted for
+  anything else.
+
+Each block below is a SEPARATE subject. Never join facts from two blocks
+into one sentence.
+"""
+
 BRIEF_SYSTEM = """You write one person's daily briefing inside their own assistant.
 
 You are given everything their hub knows about today. Answer ONLY with JSON:
@@ -617,10 +643,19 @@ a fact that is not below; if something is unknown, leave it out.
 """
 
 
+def safe_user(user):
+    """A user id that is safe as a filename. One place, three callers."""
+    return "".join(c for c in (user or "nobody") if c.isalnum() or c in "-_") or "nobody"
+
+
 def brief_path(user):
     os.makedirs(BRIEF_DIR, exist_ok=True)
-    safe = "".join(c for c in (user or "nobody") if c.isalnum() or c in "-_") or "nobody"
-    return os.path.join(BRIEF_DIR, f"{safe}.json")
+    return os.path.join(BRIEF_DIR, f"{safe_user(user)}.json")
+
+
+def ask_path(user, ext="json"):
+    os.makedirs(ASK_DIR, exist_ok=True)
+    return os.path.join(ASK_DIR, f"{safe_user(user)}.{ext}")
 
 
 def digest_of(items, evs):
@@ -687,7 +722,101 @@ def write_brief(user, key, context):
             _regen.discard((user, key))
 
 
-def briefing(user, items, evs, now, extras):
+def write_answer(user, question, context):
+    """Answer one question and file it. Runs OFF the request path.
+
+    Same shape as `write_brief`, and for the same reason: a model call is
+    seconds and a descriptor action is something a finger is waiting on. The
+    press files the question, this writes the answer, and `nudge()` tells the
+    open page to refetch — which is the machinery the briefing already uses,
+    so there is one way this page gets late news instead of two.
+    """
+    rec = {"question": question, "at": datetime.now().isoformat(timespec="minutes")}
+    try:
+        rec["text"] = ask_claude(
+            ASK_SYSTEM,
+            [{"role": "user", "content": f"{context}\n\nTHEIR QUESTION: {question}"}],
+            work="periodic_check", max_tokens=500).strip()
+        if not rec["text"]:
+            raise ValueError("the model answered with nothing")
+    except Gap as e:
+        rec["failed"] = str(e)
+    except Exception as e:  # noqa: BLE001 — a question that fails costs a line
+        rec["failed"] = f"{type(e).__name__}"
+        print(f"today: answer failed: {type(e).__name__}: {e}", flush=True)
+    try:
+        json.dump(rec, open(ask_path(user), "w"))
+    except Exception as e:  # noqa: BLE001
+        print(f"today: could not file the answer: {type(e).__name__}", flush=True)
+    with _ask_lock:
+        _asking.discard(user)
+    nudge()
+
+
+def answer_for(user, now):
+    """What is on the page: a question in flight, an answer, or neither."""
+    with _ask_lock:
+        in_flight = user in _asking
+    try:
+        rec = json.load(open(ask_path(user)))
+    except Exception:  # noqa: BLE001 — nothing asked yet
+        rec = None
+    if in_flight:
+        return None, (rec or {}).get("question", "")
+    if not rec:
+        return None, ""
+    written = when(rec.get("at"))
+    mins = int((now - written).total_seconds() // 60) if written else 0
+    return {"question": rec.get("question", ""),
+            "text": rec.get("text", ""),
+            "failed": rec.get("failed", ""),
+            "age": ("just now" if mins < 2 else f"{mins} min ago" if mins < 90
+                    else f"{mins // 60}h ago" if mins < 24 * 60 else "earlier")}, ""
+
+
+def ui_action(name, args, user):
+    """The hub's action channel — `POST /leo/ui/action`.
+
+    Three verbs, and every one of them returns at once: `ask` files the
+    question and hands the model call to a thread, `clear` forgets the last
+    answer, `rewrite` drops the cached briefing so the next draw rebuilds it.
+    Nothing here blocks on a model.
+    """
+    if name == "ask":
+        question = str(args.get("text") or "").strip()[:300]
+        if not question:
+            return {"ok": False, "error": "no question"}
+        try:
+            context = open(ask_path(user, "ctx")).read()
+        except Exception:  # noqa: BLE001 — never drawn for this person yet
+            context = ""
+        if not context:
+            return {"ok": False, "error": "nothing to answer from yet"}
+        with _ask_lock:
+            if user in _asking:
+                return {"ok": True, "busy": True}
+            _asking.add(user)
+        json.dump({"question": question, "at": datetime.now().isoformat(timespec="minutes")},
+                  open(ask_path(user), "w"))
+        threading.Thread(target=write_answer, daemon=True,
+                         args=(user, question, context)).start()
+        return {"ok": True}
+    if name == "clear":
+        try:
+            os.remove(ask_path(user))
+        except OSError:
+            pass
+        return {"ok": True}
+    if name == "rewrite":
+        try:
+            os.remove(brief_path(user))
+        except OSError:
+            pass
+        return {"ok": True}
+    return {"ok": False, "error": f"no such action: {name}"}
+
+
+def briefing(user, items, evs, now, extras, context=None):
     """The cached briefing, and a regeneration if it is out of date."""
     key = digest_of(items, evs)
     try:
@@ -700,7 +829,9 @@ def briefing(user, items, evs, now, extras):
             if (user, key) not in _regen:
                 _regen.add((user, key))
                 threading.Thread(target=write_brief, daemon=True,
-                                 args=(user, key, context_for(items, evs, now, extras))).start()
+                                 args=(user, key,
+                                       context if context is not None
+                                       else context_for(items, evs, now, extras))).start()
 
     if not held:
         return None
@@ -1153,7 +1284,16 @@ def payload(grant=None, user=""):
               "late": i.get("late", ""), "done": "", "icon": KIND_ICON.get(i["kind"], "circle")}
              for i in rest]
     if loose:
-        d["loose"] = mark_last(loose[:4])
+        shown, rest = loose[:4], loose[4:12]
+        mark_last(shown)
+        if rest:
+            # The 4th row keeps its divider while there is more under it —
+            # the hairline is what separates the list from the opener.
+            shown[-1]["last"] = ""
+            mark_last(rest)
+            d["loose_rest"] = rest
+            d["loose_more"] = f"Show {len(rest)} more"
+        d["loose"] = shown
         d["loose_note"] = (f"4 of {len(loose)}" if len(loose) > 4
                            else plural(len(loose), "item"))
 
@@ -1180,7 +1320,16 @@ def payload(grant=None, user=""):
     if gaps:
         extras.append("NOT AVAILABLE RIGHT NOW: "
                       + "; ".join(g["id"] for g in gaps) + ".")
-    br = briefing(user, items, evs, now, extras)
+    # The ask path answers from exactly what the briefing was given, so the
+    # two can never disagree about what today holds. Written here because
+    # this is the only place that has assembled it.
+    ctx = context_for(items, evs, now, extras)
+    try:
+        open(ask_path(user, "ctx"), "w").write(ctx)
+    except Exception as e:  # noqa: BLE001 — Ask degrades, the page does not
+        print(f"today: could not file the context: {type(e).__name__}", flush=True)
+
+    br = briefing(user, items, evs, now, extras, ctx)
     if not br and (items or evs):
         d["brief_pending"] = "1"
     if br:
@@ -1194,6 +1343,12 @@ def payload(grant=None, user=""):
         br["focus"] = {"what": str(focus.get("what") or "")[:140],
                        "why": str(focus.get("why") or "")[:240]}
         d["brief"] = br
+
+    answer, pending = answer_for(user, now)
+    if answer:
+        d["answer"] = answer
+    if pending:
+        d["asking"] = pending
 
     d["suggestions"] = suggestions(threads, tks)
     note = changed_since(user, [i["id"] for i in items])
@@ -1239,6 +1394,43 @@ def greeting(now):
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+
+    def do_POST(self):  # noqa: N802
+        """The hub's action channel.
+
+        The forwarded body's exact shape is the hub's, not this package's, and
+        no doc on this box states it — so read the action name from either of
+        the two spellings a reader would expect, and treat anything that is
+        not `name`/`action` as the arguments. It logs what it actually got,
+        which is how the next person finds out for certain.
+        """
+        if self.path.split("?")[0] != "/leo/ui/action":
+            return self.send_error(404)
+        try:
+            n = int(self.headers.get("content-length") or 0)
+            raw = self.rfile.read(n).decode() if n else "{}"
+            body = json.loads(raw or "{}")
+            if not isinstance(body, dict):
+                raise ValueError("not an object")
+        except Exception as e:  # noqa: BLE001
+            return self.send_error(400, f"unreadable body: {type(e).__name__}")
+        name = str(body.get("name") or body.get("action") or "")
+        args = body.get("args")
+        if not isinstance(args, dict):
+            args = {k: v for k, v in body.items() if k not in ("name", "action")}
+        user = self.headers.get("x-leo-user-id") or ""
+        print(f"today: action {name!r} args={sorted(args)} user={user or '-'}", flush=True)
+        try:
+            out = ui_action(name, args, user)
+        except Exception as e:  # noqa: BLE001 — an action never takes the page down
+            print(f"today: action {name!r} failed: {type(e).__name__}: {e}", flush=True)
+            out = {"ok": False, "error": type(e).__name__}
+        blob = json.dumps(out).encode()
+        self.send_response(200)
+        self.send_header("content-type", "application/json")
+        self.send_header("content-length", str(len(blob)))
+        self.end_headers()
+        self.wfile.write(blob)
 
     def do_GET(self):  # noqa: N802
         path = self.path.split("?")[0]

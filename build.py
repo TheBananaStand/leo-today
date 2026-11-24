@@ -63,8 +63,22 @@ descriptor = {
                 # serves to a person — this page holds no privilege of its own.
                 "complete": {"method": "PATCH", "path": "/api/reminders/items/{args.id}/toggle",
                              "body": {}, "refresh": "reload"},
-                # Ask about a subject: the chip hands its own words over.
-                "ask": {"kind": "setState", "key": "form.message", "value": "{args.text}"},
+                # Ask. This was a `setState` that only filled the field —
+                # a chip that looked like a question and was a paste, and an
+                # Ask button that passed no `args` and so CLEARED what you
+                # had typed. It is the package's own action channel now:
+                # `POST /leo/ui/action`, which files the question, hands the
+                # model call to a thread and returns at once. The answer
+                # arrives by `nudge()`, on the same `today` topic `refreshOn`
+                # already listens to.
+                "ask": {"method": "POST", "path": "/api/packages/today/ui/action",
+                        "body": {"name": "ask", "args": {"text": "{args.text}"}},
+                        "refresh": "reload"},
+                "clear": {"method": "POST", "path": "/api/packages/today/ui/action",
+                          "body": {"name": "clear", "args": {}}, "refresh": "reload"},
+                # Drop the cached briefing; the next draw rebuilds it.
+                "rewrite": {"method": "POST", "path": "/api/packages/today/ui/action",
+                            "body": {"name": "rewrite", "args": {}}, "refresh": "reload"},
                 # The way out of the "nothing answered" state, and the header's
                 # own refresh.
                 "refresh": {"method": "GET", "path": "/api/packages/today/ui/data",

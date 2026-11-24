@@ -99,4 +99,46 @@ print("leo cost     :", (d.get("spend") or {}).get("amount"), "|", (d.get("spend
 print("around you   :", [h["what"] for h in d.get("house", [])])
 print("gaps         :", [g["id"] for g in d.get("gaps", [])] or "none")
 assert not d.get("gaps"), "every stubbed source should have answered"
-print("\nOK — a whole payload built with the hub stubbed out.")
+
+# --- the action channel ----------------------------------------------------
+# `ui_action` is what a press reaches. It was added with no test and the first
+# thing a test found was that it answers from a context file the page writes,
+# so a press before a draw is a real state and not a crash.
+assert m.ui_action("nope", {}, "selftest")["ok"] is False, "an unknown action must refuse"
+assert m.ui_action("ask", {"text": ""}, "selftest")["ok"] is False, "an empty question must refuse"
+
+import time
+answered = {}
+m.ask_claude = lambda *a, **k: "The nightly release. It has been failing since Saturday."
+m.nudge = lambda: answered.setdefault("nudged", True)
+assert m.ui_action("ask", {"text": "What should I do first?"}, "selftest")["ok"], "ask refused"
+for _ in range(100):
+    got, pending = m.answer_for("selftest", now)
+    if got:
+        break
+    time.sleep(0.05)
+assert got, "no answer was ever filed"
+assert got["question"] == "What should I do first?", got
+assert "nightly release" in got["text"], got
+assert not got["failed"], got
+assert answered.get("nudged"), "the open page was never told"
+print("ask          :", got["question"], "->", got["text"][:40], "|", got["age"])
+
+# A model that refuses must leave a sentence, not an empty card.
+def boom(*a, **k):
+    raise m.Gap("the hub refused the model call (503)")
+m.ask_claude = boom
+m.ui_action("ask", {"text": "And then?"}, "selftest")
+for _ in range(100):
+    got, _p = m.answer_for("selftest", now)
+    if got and got["question"] == "And then?":
+        break
+    time.sleep(0.05)
+assert got["failed"], "a refused call must say so"
+print("ask refused  :", got["failed"])
+
+assert m.ui_action("clear", {}, "selftest")["ok"]
+assert m.answer_for("selftest", now) == (None, ""), "clear left something behind"
+print("clear        : nothing left")
+
+print("\nOK — a whole payload built with the hub stubbed out, and the action channel answers.")
