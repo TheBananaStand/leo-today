@@ -774,24 +774,6 @@ def answer_for(user, now):
                     else f"{mins // 60}h ago" if mins < 24 * 60 else "earlier")}, ""
 
 
-def pairs(v):
-    """Args as a dict, whatever shape they arrived in.
-
-    `--boxes` prints a press's args as `[["text", "..."]]`, and that list of
-    pairs is what the hub forwards — not the object a reader would assume.
-    A dict, a list of pairs and a list of one-key objects all land here.
-    """
-    if isinstance(v, dict):
-        return {str(k): str(x) for k, x in v.items()}
-    out = {}
-    for item in v if isinstance(v, list) else []:
-        if isinstance(item, (list, tuple)) and len(item) == 2:
-            out[str(item[0])] = str(item[1])
-        elif isinstance(item, dict):
-            out.update({str(k): str(x) for k, x in item.items()})
-    return out
-
-
 def ui_action(name, args, user):
     """The hub's action channel — `POST /leo/ui/action`.
 
@@ -1436,16 +1418,14 @@ class Handler(BaseHTTPRequestHandler):
         # The QUERY carries the action, because that is the half of a
         # descriptor action the hub resolves `{…}` in. The body is read too,
         # so a caller that sends one — curl, a test, a future hub — still works.
+        # MEASURED by logging what arrived, then deleting the log: a
+        # `packageAction` is forwarded as {"name": "ask", "args": {...}} with
+        # the person in `x-leo-user-id`. The query is read as well, and only
+        # so that curl and a test can drive this without composing a body.
         q = {k: v[0] for k, v in
              urllib.parse.parse_qs(split.query, keep_blank_values=True).items()}
-        print(f"today: RAW action body={raw[:400]} query={split.query[:200]} "
-              f"hdrs={ {k.lower(): v[:60] for k, v in self.headers.items()
-                        if k.lower().startswith(('x-leo', 'x-action'))} }", flush=True)
-        name = str(q.pop("name", "") or body.get("name") or body.get("action")
-                   or self.headers.get("x-leo-action") or "")
-        args = dict(pairs(body.get("args")))
-        if not args:
-            args = {k: v for k, v in body.items() if k not in ("name", "action", "args")}
+        name = str(body.get("name") or q.pop("name", "") or "")
+        args = dict(body.get("args") if isinstance(body.get("args"), dict) else {})
         args.update(q)
         user = self.headers.get("x-leo-user-id") or ""
         print(f"today: action {name!r} args={sorted(args)} user={user or '-'}", flush=True)

@@ -95,13 +95,31 @@ by writing on a thread and nudging the open page, and Ask uses the same
 machinery rather than a second one. The page therefore has three Ask states —
 in flight, answered, and could-not-answer — and renders all three.
 
-**Everything an action carries goes in the QUERY, and that is measured
-rather than chosen.** The hub resolves `{...}` in a descriptor action's `path`
-and **not** in its `body`: a first cut put the question in the body, the
-process received the literal string `{args.text}`, and the model answered
-"I'm ready to answer, but I don't see your question." `do_POST` reads the
-query first and the body second, so a caller that sends one -- curl, a test --
-still works.
+**Declare these as `packageAction`, not as a hand-written HTTP call.** That
+is the action kind that reaches a package's `ui_action`, and the hub forwards
+it as `{"name": "ask", "args": {"text": "..."}}` with the person in
+`x-leo-user-id`:
+
+```json
+"ask": {"kind": "packageAction", "name": "ask",
+        "args": {"text": "{args.text}"}, "refresh": "reload"}
+```
+
+Two HTTP spellings were tried first and **both returned 200 while doing
+nothing**, which is why they are written down in `build.py` rather than
+quietly replaced:
+
+* a templated **body** is passed through VERBATIM, so the process was handed
+  the literal string `{args.text}` as the question -- and the model answered,
+  correctly, that it could not see a question;
+* a templated **query** is stripped when the hub proxies, and the hub fills
+  its own `{name, args}` body, which for a generic HTTP action is
+  `{"args": null, "name": ""}`.
+
+`docs/package-ui.md` names the right one in a single line -- `ui_action` is
+"server-computed mutations for `packageAction`" -- and `leo-apple`'s
+`photos_app.rs` has it in an actions map. Neither was reachable by reasoning
+about the wire; it took logging what actually arrived.
 
 ## Ask
 
