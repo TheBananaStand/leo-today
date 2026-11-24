@@ -638,27 +638,27 @@ Each block below is a SEPARATE subject. Never join facts from two blocks
 into one sentence.
 """
 
-BRIEF_SYSTEM = """You pick the ONE thing on a person's day that most deserves their
-attention, inside their own assistant. You are the single sentence at the top
-of a page that already shows their calendar, their to-dos and what is wrong
-around them — in full, a few inches below you.
+RANK_SYSTEM = """You triage one person's inbox, inside their own assistant.
+
+You are given every item waiting on them — messages from people, things due,
+things wrong around them — each with an id, then their calendar for context.
+Decide the ORDER they should deal with them in. You do not write a summary
+and you do not restate the items; they can read them.
 
 Answer ONLY with JSON:
 
-{"what": "...", "why": "..."}
+{"order": [{"id": "...", "why": "..."}]}
 
-- what: ONE short sentence, twelve words at most, naming the real thing.
-  Prefer someone waiting on them, then a deadline, then a consequence. It is
-  NOT a summary of the day: never say meetings are done, never recite what is
-  on the calendar, never count things. They can see all of that.
-- why: why THAT one rather than another, twenty words at most — and only if
-  it says something the page does not already show. Otherwise "". "Worth
-  monitoring", "needs attention", "it's your first thing tomorrow" are the
-  shape of a reason with nothing inside it: leave it empty instead.
-- If nothing deserves it, what is "Nothing needs you right now." and why "".
+- order: up to six ids, most deserving first. Someone waiting on them beats
+  a deadline; a deadline beats a consequence; a consequence beats a chore
+  that has sat for months and can sit another day.
+- why: eight words at most on why it is THERE in the order — "she has asked
+  twice", "locks you out on Friday" — and only when the item does not already
+  say it. Otherwise "". Never "needs attention", never "worth a look".
+- Use only ids that appear below. Leave out anything you would not put in
+  the first six; it keeps its place underneath.
 
-Each block below is a SEPARATE subject. Never join facts from two blocks
-into one sentence. Never invent a fact that is not below.
+Never invent a fact that is not below.
 """
 
 
@@ -762,42 +762,41 @@ def context_for(items, evs, now, extras):
 
 
 def write_brief(user, key, context):
-    """Ask for the briefing and file it. Runs OFF the request path."""
+    """Ask for the ORDER of the inbox and file it. Runs OFF the request path.
+
+    The name is the old one. It wrote a headline, then a sentence; what it
+    writes now is a ranking, because the top row of an inbox IS the one
+    thing, and a model that orders real rows cannot restate them.
+    """
     try:
-        system = BRIEF_SYSTEM
+        system = RANK_SYSTEM
         told = fixes(user)
         if told:
             # Last, so it is the nearest thing to the request, and phrased as
             # a rule rather than as information — a correction that reads as
             # one more fact gets weighed against the facts and loses.
-            system += ("\nTHIS PERSON HAS CORRECTED YOU. These are standing "
-                       "instructions and they OVERRIDE anything you infer "
-                       "below:\n"
+            system += ("\nTHIS PERSON'S STANDING RULES. They OVERRIDE your own "
+                       "judgment; an item a rule says is not for them goes "
+                       "LAST or is left out:\n"
                        + "\n".join(f"- {f['text']}" for f in told) + "\n")
         answer = ask_claude(system, [{"role": "user", "content": context}],
-                            work="periodic_check", max_tokens=600)
+                            work="periodic_check", max_tokens=500)
         text = answer.strip()
-        if text.startswith("```"):
-            text = text.split("```")[1].lstrip("json").strip()
         data = json.loads(text[text.index("{"):text.rindex("}") + 1])
-        if not isinstance(data.get("what"), str) or not data["what"].strip():
-            raise ValueError("no `what`")
-        data["at"] = datetime.now().isoformat(timespec="minutes")
+        order = [{"id": str(o.get("id")), "why": str(o.get("why") or "").strip()[:80]}
+                 for o in (data.get("order") or []) if isinstance(o, dict) and o.get("id")]
+        if not order:
+            raise ValueError("no order")
         with _regen_lock:
-            json.dump({"digest": key, "brief": data}, open(brief_path(user), "w"))
-    except Exception as e:  # noqa: BLE001 — a briefing that fails costs a block
-        print(f"today: briefing failed: {type(e).__name__}: {e}", flush=True)
+            json.dump({"digest": key, "order": order[:8],
+                       "at": datetime.now().isoformat(timespec="minutes")},
+                      open(brief_path(user), "w"))
+    except Exception as e:  # noqa: BLE001 — a ranking that fails costs an order
+        print(f"today: ranking failed: {type(e).__name__}: {e}", flush=True)
     finally:
         with _regen_lock:
             _regen.discard((user, key))
-        # `nudge()`'s own docstring is about THIS case — "the briefing is
-        # written on a background thread, so by the time it exists the page
-        # that triggered it has already been drawn" — and it was never called
-        # from here. The first briefing sat behind "Reading your day…" until
-        # something else happened to reload the page. It matters more now
-        # that a correction drops the cache on purpose: without this, saying
-        # "that's not right" blanks the hero and leaves it blank.
-        nudge()
+        nudge()   # the open page was drawn before this existed
 
 
 def write_answer(user, question, context):
@@ -885,6 +884,34 @@ def ui_action(name, args, user):
         except OSError:
             pass
         return {"ok": True}
+    if name in ("done", "later", "mute"):
+        iid, what = str(args.get("id") or ""), str(args.get("what") or "")[:120]
+        if not iid:
+            return {"ok": False, "error": "no item"}
+        now = datetime.now(timezone.utc).astimezone()
+        st = load_state(user, now)
+        bucket = {"done": "done", "later": "later", "mute": "muted"}[name]
+        st[bucket][iid] = later_until(now).isoformat() if name == "later" else now.isoformat()
+        st["last"] = {"verb": name, "id": iid, "what": what, "at": now.isoformat()}
+        if name == "mute" and what:
+            add_fix(user, f"Not for me: {what}")
+        save_state(user, st)
+        return {"ok": True}
+    if name == "undo":
+        st = load_state(user)
+        last = st.get("last")
+        if not last:
+            return {"ok": False, "error": "nothing to undo"}
+        for bucket in ("done", "later", "muted"):
+            st[bucket].pop(last["id"], None)
+        if last["verb"] == "mute":
+            rule = f"Not for me: {last['what']}"
+            for f in fixes(user):
+                if f["text"] == rule:
+                    drop_fix(user, f["id"])
+        st["last"] = None
+        save_state(user, st)
+        return {"ok": True}
     if name == "correct":
         text = str(args.get("text") or "").strip()[:200]
         if not text:
@@ -914,37 +941,72 @@ def ui_action(name, args, user):
     return {"ok": False, "error": f"no such action: {name}"}
 
 
-def briefing(user, items, evs, now, extras, context=None):
-    """The cached briefing, and a regeneration if it is out of date."""
-    key = digest_of(items, evs)
+def ranking(user, queue, key, context):
+    """The filed order, and a re-rank behind the page when the inbox moved.
+
+    Never blocks and never blanks: with no ranking, or a stale one, the queue
+    is drawn in its plain order and the model's arrives by `nudge()`.
+    """
     try:
         held = json.load(open(brief_path(user)))
+        if not isinstance(held.get("order"), list):
+            held = None
     except Exception:  # noqa: BLE001
         held = None
-
-    if held and not (held.get("brief") or {}).get("what"):
-        held = None   # written by an older shape of this prompt
-    if not held or held.get("digest") != key:
+    if queue and (not held or held.get("digest") != key):
         with _regen_lock:
             if (user, key) not in _regen:
                 _regen.add((user, key))
                 threading.Thread(target=write_brief, daemon=True,
-                                 args=(user, key,
-                                       context if context is not None
-                                       else context_for(items, evs, now, extras))).start()
+                                 args=(user, key, context)).start()
+    return (held or {}).get("order") or []
 
-    if not held:
-        return None
-    d = dict(held["brief"])
-    stale = held.get("digest") != key
-    written = when(d.pop("at", None))
-    if written:
-        mins = int((now - written).total_seconds() // 60)
-        d["age"] = ("just now" if mins < 2 else
-                    f"{mins} min ago" if mins < 90 else
-                    f"{mins // 60}h ago" if mins < 24 * 60 else written.strftime("%a"))
-    d["stale"] = "1" if stale else ""
-    return d
+
+# ---------------------------------------------------------------------------
+# The inbox's own state
+# ---------------------------------------------------------------------------
+# Done, Later and Not-for-me are THIS page's facts. The sources disagree about
+# what "handled" means — archive a message, complete a reminder, acknowledge a
+# failing job — and this package holds a write scope for none of them. So the
+# state lives here, per person, and every verb can be undone.
+
+STATE_DIR = os.path.join(DATA, "state")
+
+
+def state_path(user):
+    os.makedirs(STATE_DIR, exist_ok=True)
+    return os.path.join(STATE_DIR, f"{safe_user(user)}.json")
+
+
+def load_state(user, now=None):
+    try:
+        st = json.load(open(state_path(user)))
+    except Exception:  # noqa: BLE001 — nothing handled yet
+        st = {}
+    st = {"done": dict(st.get("done") or {}), "later": dict(st.get("later") or {}),
+          "muted": dict(st.get("muted") or {}), "last": st.get("last") or None}
+    if now:
+        stamp = now.isoformat()
+        st["later"] = {k: v for k, v in st["later"].items() if v > stamp}
+        old = (now - timedelta(days=30)).isoformat()
+        st["done"] = {k: v for k, v in st["done"].items() if v > old}
+    return st
+
+
+def save_state(user, st):
+    json.dump(st, open(state_path(user), "w"))
+
+
+def later_until(now):
+    """Tomorrow morning — or THIS morning, when it is still the small hours."""
+    at = now.replace(hour=7, minute=0, second=0, microsecond=0)
+    return at if at > now + timedelta(hours=1) else at + timedelta(days=1)
+
+
+def item_key(kind, text):
+    """An id for a row whose source gives it none that lasts. `b0` is a
+    position; "Nightly release is failing" is the thing."""
+    return f"{kind}-{hashlib.sha1(text.lower().encode()).hexdigest()[:10]}"
 
 
 def money(now, act):
@@ -1297,9 +1359,12 @@ def payload(grant=None, user=""):
     d = {"loaded": "1",
          "greeting": greeting(now),
          "date_line": now.strftime("%-d %B · week %V"),
-         "keys": [{"id": "k1", "key": "j k", "does": "move through tasks"},
-                  {"id": "k2", "key": "e", "does": "tick off"},
-                  {"id": "k3", "key": "/", "does": "ask"}]}
+         "keys": [{"id": "k1", "key": "j k", "does": "move"},
+                  {"id": "k2", "key": "e", "does": "done"},
+                  {"id": "k3", "key": "h", "does": "later"},
+                  {"id": "k4", "key": "x", "does": "not for me"},
+                  {"id": "k5", "key": "z", "does": "undo"},
+                  {"id": "k6", "key": "/", "does": "ask"}]}
 
     if gaps and len(gaps) + quiet == len(sources):
         d["nothing_worked"] = "1"
@@ -1315,7 +1380,9 @@ def payload(grant=None, user=""):
     # And nobody needs to be told where THEY are: the viewer's own location
     # was the first row of this list.
     others = [w for w in (got.get("whereis") or []) if w.get("uid") != user]
-    around = (got.get("house") or []) + (got.get("box") or []) + others
+    # What is WRONG — the door, the failing job — is an inbox item now, not a
+    # fact: it wants something from you. What is left here only informs.
+    around = list(others)
     if got.get("money"):
         m_ = got["money"]
         around.append({"id": "money", "icon": "creditcard", "tint": "blue",
@@ -1362,102 +1429,70 @@ def payload(grant=None, user=""):
             d["rail"] = rail
             d["rail_note"] = f"{len(today)} today"
 
-    # Subjects
-    items = []
-    for t in tks:
-        items.append({"id": f"t{t['id']}", "kind": "task", "text": t["title"], "when": t["when"],
-                      "late": t["late"], "deadline": None, "order": 0})
+    # ---- the inbox: everything waiting on this person, as ONE list --------
+    st = load_state(user, now)
+    hidden = set(st["done"]) | set(st["later"]) | set(st["muted"])
+    queue = []
     for m in mls:
-        items.append({"id": m["id"], "kind": "mail", "text": f"{m['who']} — {m['subject']}",
-                      "when": "", "late": "", "deadline": None, "order": 1})
-    for e in evs:
-        items.append({"id": f"e{e['id']}", "kind": "event", "text": e["title"],
-                      "when": clock(e["at"]) + (" tomorrow" if e["tomorrow"] else ""),
-                      "late": "", "deadline": e["at"], "order": 2})
+        queue.append({"id": m["id"], "kind": "mail", "icon": "envelope", "rank": 0 if m["unread"] else 3,
+                      "what": f"{m['who']} — {m['subject']}", "when": "", "late": ""})
+    for h in (got.get("house") or []) + (got.get("box") or []):
+        queue.append({"id": item_key("alert", h["what"]), "kind": "alert", "icon": h["icon"], "rank": 1,
+                      "what": h["what"], "when": h.get("detail", ""), "late": ""})
+    for t in tks:
+        queue.append({"id": f"t{t['id']}", "kind": "task", "icon": "checkmark.circle",
+                      "rank": 2 if t["late"] else 4,
+                      "what": t["title"], "when": t["when"], "late": t["late"]})
     for n in nts:
-        items.append({"id": f"n{n['id']}", "kind": "note", "text": n["title"],
-                      "when": n["when"], "late": "", "deadline": None, "order": 3})
+        queue.append({"id": f"n{n['id']}", "kind": "note", "icon": "sparkles", "rank": 5,
+                      "what": n["title"], "when": n["when"], "late": ""})
+    waiting = sum(1 for q in queue if q["id"] in st["later"])
+    queue = [q for q in queue if q["id"] not in hidden]
+    queue.sort(key=lambda q: q["rank"])            # the plain order, model or no model
 
-    threads, used = build_threads(items, now)
-    if threads:
-        d["threads"] = threads
-        d["threads_note"] = (plural(len(threads), "subject") + ", "
-                             + plural(sum(len(t["strands"]) for t in threads), "item"))
-
-    # Whatever no subject claimed, and only what is due
-    rest = [i for i in items if i["id"] not in used and i["kind"] in ("task", "mail")]
-    # Something a person sent, then something genuinely late, then the
-    # abandoned. Five months of chores at the top buries the one line on the
-    # page somebody is actually waiting on.
-    rest.sort(key=lambda i: (0 if i["kind"] == "mail" else 1 if i.get("late") else 2))
-    loose = [{"id": i["id"], "what": i["text"][:90], "when": i.get("when", ""),
-              "late": i.get("late", ""), "done": "", "icon": KIND_ICON.get(i["kind"], "circle")}
-             for i in rest]
-    if loose:
-        shown, rest = loose[:4], loose[4:12]
-        mark_last(shown)
-        if rest:
-            # The 4th row keeps its divider while there is more under it —
-            # the hairline is what separates the list from the opener.
-            shown[-1]["last"] = ""
-            mark_last(rest)
-            d["loose_rest"] = rest
-            d["loose_more"] = f"Show {len(rest)} more"
-        d["loose"] = shown
-        d["loose_note"] = (f"4 of {len(loose)}" if len(loose) > 4
-                           else plural(len(loose), "item"))
-
-    # The briefing. Cached against what it is about; served stale and
-    # rewritten behind the page when that changes. Never blocks.
     extras = []
     if got.get("weather"):
         w = got["weather"]
         extras.append(f"WEATHER: {w['temp']} {w['condition']}, {w['range']}.")
-    if got.get("house"):
-        extras.append("THE HOUSE (doors, locks, thermostats): "
-                      + "; ".join(h["what"] for h in got["house"]) + ".")
-    if got.get("whereis"):
-        extras.append("WHERE PEOPLE ARE (a phone's own location — nothing to do with "
-                      "anything else below): "
-                      + "; ".join(f"{h['what']} ({h['detail']})" for h in got["whereis"]) + ".")
-    if got.get("box"):
-        extras.append("THIS HUB'S OWN HEALTH (software on the box, not about any person): "
-                      + "; ".join(h["what"] for h in got["box"]) + ".")
-    if got.get("money"):
-        extras.append(f"SPENDING THIS MONTH: {got['money']['amount']} — {got['money']['note']}.")
-    if got.get("spend"):
-        extras.append(f"THIS HUB'S MODEL SPEND: {got['spend']['amount']}, {got['spend']['note']}.")
-    if gaps:
-        extras.append("NOT AVAILABLE RIGHT NOW: "
-                      + "; ".join(g["id"] for g in gaps) + ".")
-    # The ask path answers from exactly what the briefing was given, so the
-    # two can never disagree about what today holds. Written here because
-    # this is the only place that has assembled it.
-    ctx = context_for(items, evs, now, extras)
+    items = [{"id": q["id"], "kind": q["kind"], "text": q["what"], "when": q["when"],
+              "late": q["late"]} for q in queue]
+    ctx = ("THE INBOX — one line per item, `id | kind | what | when`:\n"
+           + "\n".join(f"{q['id']} | {q['kind']} | {q['what']} | {q['when'] or '-'}"
+                        + (" | LATE" if q["late"] else "") for q in queue)
+           + "\n\n" + context_for([], evs, now, extras))
     try:
-        open(ask_path(user, "ctx"), "w").write(ctx)
+        open(ask_path(user, "ctx"), "w").write(ctx)   # Ask answers from the same facts
     except Exception as e:  # noqa: BLE001 — Ask degrades, the page does not
         print(f"today: could not file the context: {type(e).__name__}", flush=True)
 
-    br = briefing(user, items, evs, now, extras, ctx)
-    if not br and (items or evs):
-        d["brief_pending"] = "1"
-    if br:
-        # The hero is one sentence and, at most, its reason. It was a
-        # headline, a focus and four notes; the headline went last, because
-        # "Today's meetings are done. Tomorrow starts at 08:00…" is the
-        # calendar read aloud, directly above the calendar.
-        what = str(br.get("what") or "").strip()[:140]
-        if what:
-            d["brief"] = {"what": what, "why": str(br.get("why") or "").strip()[:200],
-                          "age": br.get("age", ""), "stale": br.get("stale", "")}
-        else:
-            d["brief_pending"] = "1"   # an old-shape cache; a rewrite is already running
+    order = ranking(user, queue, digest_of(items, evs), ctx)
+    place = {o["id"]: i for i, o in enumerate(order)}
+    why = {o["id"]: o["why"] for o in order}
+    queue.sort(key=lambda q: place.get(q["id"], 99))   # stable: the rest keep their plain order
+    drawn = [{"id": q["id"], "icon": q["icon"], "what": q["what"][:110], "why": why.get(q["id"], ""),
+             "when": q["when"], "late": q["late"]} for q in queue]
+    if drawn:
+        shown, rest = drawn[:7], drawn[7:30]
+        mark_last(shown)
+        if rest:
+            shown[-1]["last"] = ""
+            mark_last(rest)
+            d["queue_rest"] = rest
+            d["queue_more"] = f"Show {len(rest)} more"
+        d["queue"] = shown
+    elif not gaps:
+        d["zero"] = "1"
+    if waiting:
+        d["later_note"] = f"{waiting} back tomorrow" if waiting > 1 else "1 back tomorrow"
+    last = st.get("last")
+    if last and (now - (when(last["at"]) or now)) < timedelta(minutes=10):
+        verb = {"done": "Done", "later": "Later", "mute": "Not for me"}[last["verb"]]
+        d["undo"] = f"{verb}: {last['what']}"[:90]
 
     told = fixes(user)
     if told:
         d["corrections"] = told
-        d["corrections_note"] = plural(len(told), "correction")
+        d["corrections_note"] = plural(len(told), "rule")
 
     answer, pending = answer_for(user, now)
     if answer:
@@ -1465,7 +1500,7 @@ def payload(grant=None, user=""):
     if pending:
         d["asking"] = pending
 
-    d["suggestions"] = suggestions(threads, tks)
+    d["suggestions"] = suggestions([], tks)
     note = changed_since(user, [i["id"] for i in items])
     if note:
         d["changed"] = note

@@ -61,16 +61,6 @@ descriptor = {
             "actions": {
                 # The tick on a row, through the route Reminders already
                 # serves to a person — this page holds no privilege of its own.
-                "complete": {"method": "PATCH", "path": "/api/reminders/items/{args.id}/toggle",
-                             "body": {}, "refresh": "reload"},
-                # Ask. This was a `setState` that only filled the field —
-                # a chip that looked like a question and was a paste, and an
-                # Ask button that passed no `args` and so CLEARED what you
-                # had typed. It is the package's own action channel now:
-                # `POST /leo/ui/action`, which files the question, hands the
-                # model call to a thread and returns at once. The answer
-                # arrives by `nudge()`, on the same `today` topic `refreshOn`
-                # already listens to.
                 # `packageAction` is the kind that reaches a package's own
                 # `ui_action` — `POST /leo/ui/action` for a hosted process.
                 # It is NOT a hand-written HTTP call: two were tried first and
@@ -91,6 +81,16 @@ descriptor = {
                         "args": {"text": "{args.text}"}, "refresh": "reload"},
                 "clear": {"kind": "packageAction", "name": "clear",
                           "refresh": "reload"},
+                # The inbox's verbs. All four are this package's own state —
+                # it holds no write scope for mail or reminders — and every
+                # one can be undone.
+                "done": {"kind": "packageAction", "name": "done",
+                         "args": {"id": "{args.id}", "what": "{args.what}"}, "refresh": "reload"},
+                "later": {"kind": "packageAction", "name": "later",
+                          "args": {"id": "{args.id}", "what": "{args.what}"}, "refresh": "reload"},
+                "mute": {"kind": "packageAction", "name": "mute",
+                         "args": {"id": "{args.id}", "what": "{args.what}"}, "refresh": "reload"},
+                "undo": {"kind": "packageAction", "name": "undo", "refresh": "reload"},
                 # Telling it it is wrong. `correct` is standing — it is handed
                 # to every rewrite from here on, not just the next one.
                 "correct": {"kind": "packageAction", "name": "correct",
@@ -98,14 +98,10 @@ descriptor = {
                 "uncorrect": {"kind": "packageAction", "name": "uncorrect",
                               "args": {"id": "{args.id}"}, "refresh": "reload"},
                 # Drop the cached briefing; the next draw rebuilds it.
-                "rewrite": {"kind": "packageAction", "name": "rewrite",
-                            "refresh": "reload"},
                 # The way out of the "nothing answered" state, and the header's
                 # own refresh.
                 "refresh": {"method": "GET", "path": "/api/packages/today/ui/data",
                             "refresh": "reload"},
-                "show_changed": {"method": "GET", "path": "/api/packages/today/ui/data",
-                                 "refresh": "reload"},
             },
         }
     },

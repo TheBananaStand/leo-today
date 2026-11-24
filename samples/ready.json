@@ -6,15 +6,30 @@
   {
    "id": "k1",
    "key": "j k",
-   "does": "move through tasks"
+   "does": "move"
   },
   {
    "id": "k2",
    "key": "e",
-   "does": "tick off"
+   "does": "done"
   },
   {
    "id": "k3",
+   "key": "h",
+   "does": "later"
+  },
+  {
+   "id": "k4",
+   "key": "x",
+   "does": "not for me"
+  },
+  {
+   "id": "k5",
+   "key": "z",
+   "does": "undo"
+  },
+  {
+   "id": "k6",
    "key": "/",
    "does": "ask"
   }
@@ -27,30 +42,6 @@
   "tint": "blue"
  },
  "house": [
-  {
-   "id": "h0",
-   "icon": "lock.open",
-   "tint": "red",
-   "what": "Front Door is unlocked",
-   "detail": "",
-   "last": ""
-  },
-  {
-   "id": "b0",
-   "icon": "clock.badge.exclamationmark",
-   "tint": "amber",
-   "what": "Nightly release is failing",
-   "detail": "last ran 11:15 22 Nov",
-   "last": ""
-  },
-  {
-   "id": "b1",
-   "icon": "shippingbox",
-   "tint": "teal",
-   "what": "1 build landed, unannounced",
-   "detail": "1.4.0",
-   "last": ""
-  },
   {
    "id": "w0",
    "uid": "u1",
@@ -117,7 +108,7 @@
  "at": {
   "before": "720",
   "after": "0",
-  "label": "19:03"
+  "label": "19:25"
  },
  "strip_from": "07:00",
  "strip_to": "19:00",
@@ -174,80 +165,87 @@
   }
  ],
  "rail_note": "3 today",
- "threads": [
+ "queue_rest": [
   {
-   "id": "austin",
-   "tint": "green",
-   "icon": "calendar",
-   "title": "Austin",
-   "state": "4 items across 3 places · 1 late · next tomorrow.",
-   "clock": "tomorrow",
-   "do": "Renew the passport for Austin",
-   "do_id": "tr1",
-   "ask": "What's left on Austin?",
-   "strands": [
-    {
-     "id": "tr1",
-     "icon": "checkmark.square",
-     "what": "Renew the passport for Austin",
-     "when": "4 days late",
-     "late": "1",
-     "done": ""
-    },
-    {
-     "id": "tr3",
-     "icon": "checkmark.square",
-     "what": "Book the Austin flights",
-     "when": "Today",
-     "late": "",
-     "done": ""
-    },
-    {
-     "id": "mm1",
-     "icon": "envelope",
-     "what": "Maya Chen — Austin itinerary — need your dates",
-     "when": "",
-     "late": "",
-     "done": ""
-    },
-    {
-     "id": "e4",
-     "icon": "calendar",
-     "what": "Flight to Austin",
-     "when": "08:00 tomorrow",
-     "late": "",
-     "done": ""
-    }
-   ]
-  }
- ],
- "threads_note": "1 subject, 4 items",
- "loose": [
-  {
-   "id": "tr2",
-   "what": "Fix light switch",
-   "when": "5 months",
+   "id": "nf1",
+   "icon": "sparkles",
+   "what": "Amex is running hot",
+   "why": "",
+   "when": "19:25",
    "late": "",
-   "done": "",
-   "icon": "checkmark.square",
    "last": "1"
   }
  ],
- "loose_note": "1 item",
- "brief": {
-  "what": "Answer Maya about the Austin dates.",
-  "why": "She has asked twice and you fly tomorrow.",
-  "age": "just now",
-  "stale": "1"
- },
+ "queue_more": "Show 1 more",
+ "queue": [
+  {
+   "id": "mm1",
+   "icon": "envelope",
+   "what": "Maya Chen — Austin itinerary — need your dates",
+   "why": "she has asked twice",
+   "when": "",
+   "late": "",
+   "last": ""
+  },
+  {
+   "id": "tr1",
+   "icon": "checkmark.circle",
+   "what": "Renew the passport for Austin",
+   "why": "",
+   "when": "4 days late",
+   "late": "1",
+   "last": ""
+  },
+  {
+   "id": "alert-8d75282c64",
+   "icon": "lock.open",
+   "what": "Front Door is unlocked",
+   "why": "",
+   "when": "",
+   "late": "",
+   "last": ""
+  },
+  {
+   "id": "alert-3f4f948776",
+   "icon": "clock.badge.exclamationmark",
+   "what": "Nightly release is failing",
+   "why": "",
+   "when": "last ran 11:15 22 Nov",
+   "late": "",
+   "last": ""
+  },
+  {
+   "id": "alert-53a705a75b",
+   "icon": "shippingbox",
+   "what": "1 build landed, unannounced",
+   "why": "",
+   "when": "1.4.0",
+   "late": "",
+   "last": ""
+  },
+  {
+   "id": "tr2",
+   "icon": "checkmark.circle",
+   "what": "Fix light switch",
+   "why": "",
+   "when": "5 months",
+   "late": "",
+   "last": ""
+  },
+  {
+   "id": "tr3",
+   "icon": "checkmark.circle",
+   "what": "Book the Austin flights",
+   "why": "",
+   "when": "Today",
+   "late": "",
+   "last": ""
+  }
+ ],
  "suggestions": [
   {
    "id": "s0",
    "text": "What should I do first?"
-  },
-  {
-   "id": "saustin",
-   "text": "What's left on Austin?"
   },
   {
    "id": "sl",

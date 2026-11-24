@@ -70,33 +70,62 @@ m.tool = lambda name, args, tok: (
                 "categories": [{"category_name": "Travel", "total": 980.0}]}) if name == "finance" else
     "Cloudy. 5° now, 2° / 7° today.")
 m.ask_claude = lambda *a, **k: json.dumps(
-    {"what": "Answer Maya about the Austin dates.", "why": "She has asked twice and you fly tomorrow."})
+    {"order": [{"id": "mm1", "why": "she has asked twice"}, {"id": "tr1", "why": ""}]})
 m.nudge = lambda: None
 
 d = m.payload("grant", "selftest")
 m.write_brief("selftest", m.digest_of([], []), "ctx")   # exercise the model path too
 d = m.payload("grant", "selftest")
 
-for key in ("strip", "at", "now", "rail", "loose", "suggestions", "keys"):
-    assert key in d, f"payload is missing {key!r}"
-print("payload keys :", len(d))
-print("strip        :", " ".join((b["label"] or "·") for b in d["strip"]))
-print("window       :", d["strip_from"], "→", d["strip_to"], "|", d["strip_note"], "| now", d["at"]["label"])
-print("hero         :", d["now"]["lead"], d["now"]["time"], "|", d["now"]["title"][:34])
-print("rail         :", [(r["time"], r["title"][:22]) for r in d["rail"]])
-print("threads      :", [(t["title"], t["clock"], len(t["strands"])) for t in d.get("threads", [])]
-      or d.get("no_threads", "")[:70])
-print("loose        :", [(x["what"][:26], x["when"]) for x in d["loose"]])
-print("house        :", [h["what"] for h in d.get("house", [])])
-print("weather      :", d.get("weather", {}).get("temp"), d.get("weather", {}).get("range"))
-print("brief        :", (d.get("brief") or {}).get("what", "(none)"), "|", (d.get("brief") or {}).get("why", ""))
-print("money        :", (d.get("money") or {}).get("amount"), "|", (d.get("money") or {}).get("note", "")[:40])
-print("leo cost     :", (d.get("spend") or {}).get("amount"), "|", (d.get("spend") or {}).get("note", "")[:46])
-print("around you   :", [h["what"] for h in d.get("house", [])])
-print("gaps         :", d.get("gaps_line") or "none")
+import time
+for _ in range(100):                     # the ranking is written on a thread
+    d = m.payload("grant", "selftest")
+    if d["queue"][0]["why"]:
+        break
+    time.sleep(0.05)
+q = d["queue"]
+print("queue        :", [(r["id"], r["what"][:28], r["why"]) for r in q])
+assert q[0]["id"] == "mm1" and q[0]["why"] == "she has asked twice", "the filed order did not reach the queue"
+assert q[1]["id"] == "tr1", "second ranked id is not second"
+kinds = {r["id"][0] for r in q} | {r["id"].split("-")[0] for r in q}
+assert "alert" in kinds, "what is wrong around you must be IN the inbox"
+assert not any(h["what"].startswith(("Front Door", "Nightly")) for h in d.get("house", [])), "an alert is in both lists"
 assert not d.get("gaps_line"), "every stubbed source should have answered"
-assert not any(h.get("uid") == "selftest" for h in d.get("house", [])), "the viewer's own location is on their page"
-assert {"money", "spend"} <= {h["id"] for h in d["house"]}, "money and the model bill belong in the one list"
+assert (d.get("queue_rest") or q)[-1]["last"] == "1", "the true last row keeps no divider"
+
+# --- the verbs: done, later, not for me, undo -------------------------------
+n = len(q) + len(d.get("queue_rest") or [])
+assert m.ui_action("done", {"id": "tr2", "what": "Fix light switch"}, "selftest")["ok"]
+d = m.payload("grant", "selftest")
+assert "tr2" not in [r["id"] for r in d["queue"]] and len(d["queue"]) + len(d.get("queue_rest") or []) == n - 1, "done did not remove the row"
+assert d["undo"].startswith("Done: Fix light switch"), d.get("undo")
+assert m.ui_action("undo", {}, "selftest")["ok"]
+d = m.payload("grant", "selftest")
+assert "tr2" in [r["id"] for r in d["queue"]] and "undo" not in d, "undo did not bring it back"
+assert m.ui_action("undo", {}, "selftest")["ok"] is False, "a second undo must refuse"
+
+m.ui_action("later", {"id": "tr2", "what": "Fix light switch"}, "selftest")
+d = m.payload("grant", "selftest")
+assert "tr2" not in [r["id"] for r in d["queue"]] and d["later_note"] == "1 back tomorrow", d.get("later_note")
+st = m.load_state("selftest")
+assert m.when(st["later"]["tr2"]) > now, "later must end in the future"
+st["later"]["tr2"] = (now - timedelta(minutes=1)).isoformat(); m.save_state("selftest", st)
+d = m.payload("grant", "selftest")
+assert "tr2" in [r["id"] for r in d["queue"]], "a snooze that has ended must come back"
+
+m.ui_action("mute", {"id": "mm2", "what": "Newegg — Black Friday"}, "selftest")
+assert any(f["text"] == "Not for me: Newegg — Black Friday" for f in m.fixes("selftest")), "mute taught nothing"
+m.ui_action("undo", {}, "selftest")
+assert not m.fixes("selftest"), "undoing a mute must withdraw its rule"
+
+_d = m.payload("grant", "selftest")
+for r in _d["queue"] + (_d.get("queue_rest") or []):
+    m.ui_action("done", {"id": r["id"], "what": r["what"]}, "selftest")
+d = m.payload("grant", "selftest")
+assert d.get("zero") == "1" and "queue" not in d, "an emptied inbox must say so"
+print("verbs        : done, later (and its return), not-for-me, undo — and zero")
+os.remove(m.state_path("selftest"))
+d = m.payload("grant", "selftest")
 
 # --- the action channel ----------------------------------------------------
 # `ui_action` is what a press reaches. It was added with no test and the first
@@ -163,43 +192,25 @@ told = m.fixes("selftest")
 assert len(told) == 2, f"a correction was stored twice in different case: {told}"
 
 seen = {}
-m.ask_claude = lambda system, turns, **k: seen.setdefault("system", system) and "" or json.dumps(
-    {"what": "f", "why": ""})
+def _spy(system, turns, **k):
+    seen["system"] = system
+    return json.dumps({"order": [{"id": "tr1", "why": ""}]})
+m.ask_claude = _spy
 m.write_brief("selftest", "k", "CONTEXT")
-assert "CORRECTED YOU" in seen["system"], "corrections never reached the writer"
-assert "all-day thing" in seen["system"], seen["system"][-400:]
-assert seen["system"].index("CORRECTED YOU") > seen["system"].index("SEPARATE subject"), \
-    "corrections must come LAST, nearest the request"
-print("corrections  :", len(told), "standing, and they reach the writer")
-
-# A briefing written on a thread has to TELL the open page, or it sits behind
-# "Reading your day…" until something else reloads it — and a correction
-# drops the cache on purpose, so without this, saying "that's not right"
-# blanks the hero and leaves it blank.
+assert "STANDING RULES" in seen["system"] and "all-day thing" in seen["system"], "rules never reached the ranker"
+assert seen["system"].rindex("STANDING RULES") > seen["system"].index("Never invent"), "rules must come LAST"
+print("rules        :", len(told), "standing, and they reach the ranker")
 rang = []
 m.nudge = lambda: rang.append(1)
-m.ask_claude = lambda *a, **k: json.dumps({"what": "f", "why": ""})
-m.write_brief("selftest", "k3", "CONTEXT")
-assert rang, "write_brief never nudged the open page"
+m.write_brief("selftest", "k3", "CONTEXT"); assert rang, "a ranking never nudged the open page"
 rang.clear()
 m.ask_claude = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
-m.write_brief("selftest", "k4", "CONTEXT")
-assert rang, "a FAILED briefing must nudge too, or the skeleton never clears"
+m.write_brief("selftest", "k4", "CONTEXT"); assert rang, "a FAILED ranking must nudge too"
 print("nudge        : on success and on failure")
 
 m.ui_action("uncorrect", {"id": told[0]["id"]}, "selftest")
 assert len(m.fixes("selftest")) == 1, "uncorrect did not remove exactly one"
 print("uncorrect    : one removed, one left")
-
-# A briefing must not carry notes any more — four shipped and every one
-# restated a row drawn elsewhere on the page.
-m.ask_claude = lambda *a, **k: json.dumps(
-    {"what": "f", "why": "", "headline": "h",
-     "notes": [{"what": "n", "why": "w"}]})
-m.write_brief("selftest", "k2", "CONTEXT")
-d2 = m.payload("grant", "selftest")
-assert set(d2["brief"]) == {"what", "why", "age", "stale"}, d2["brief"]
-print("brief        : one sentence and its reason, nothing else")
 
 assert m.ui_action("clear", {}, "selftest")["ok"]
 assert m.answer_for("selftest", now) == (None, ""), "clear left something behind"

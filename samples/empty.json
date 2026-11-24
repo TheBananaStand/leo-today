@@ -1,7 +1,39 @@
 {
  "loaded": "1",
- "greeting": "Monday afternoon",
+ "greeting": "Monday evening",
  "date_line": "23 November · week 48",
+ "keys": [
+  {
+   "id": "k1",
+   "key": "j k",
+   "does": "move"
+  },
+  {
+   "id": "k2",
+   "key": "e",
+   "does": "done"
+  },
+  {
+   "id": "k3",
+   "key": "h",
+   "does": "later"
+  },
+  {
+   "id": "k4",
+   "key": "x",
+   "does": "not for me"
+  },
+  {
+   "id": "k5",
+   "key": "z",
+   "does": "undo"
+  },
+  {
+   "id": "k6",
+   "key": "/",
+   "does": "ask"
+  }
+ ],
  "weather": {
   "temp": "5°",
   "range": "2° / 7°",
@@ -9,18 +41,140 @@
   "symbol": "cloud.sun",
   "tint": "blue"
  },
- "all_clear": "1",
+ "house": [
+  {
+   "id": "w0",
+   "uid": "u1",
+   "icon": "location",
+   "tint": "green",
+   "what": "Scott — 3 Maple St",
+   "detail": "4h ago",
+   "last": ""
+  },
+  {
+   "id": "money",
+   "icon": "creditcard",
+   "tint": "blue",
+   "what": "$2,341 spent this month",
+   "detail": "Travel is the largest at $980",
+   "last": ""
+  },
+  {
+   "id": "spend",
+   "icon": "cpu",
+   "tint": "amber",
+   "what": "$137.42 on models this month",
+   "detail": "$5.97 a day — on track for $179 by month end",
+   "last": "1"
+  }
+ ],
+ "strip": [
+  {
+   "id": "f0",
+   "span": "60",
+   "free": "1",
+   "tint": "",
+   "label": ""
+  },
+  {
+   "id": "1",
+   "span": "60",
+   "free": "",
+   "tint": "blue",
+   "label": ""
+  },
+  {
+   "id": "f2",
+   "span": "60",
+   "free": "1",
+   "tint": "",
+   "label": ""
+  },
+  {
+   "id": "3",
+   "span": "60",
+   "free": "",
+   "tint": "blue",
+   "label": "Weekly"
+  },
+  {
+   "id": "fz",
+   "span": "480",
+   "free": "1",
+   "tint": "",
+   "label": "8 hours clear"
+  }
+ ],
+ "at": {
+  "before": "720",
+  "after": "0",
+  "label": "19:25"
+ },
+ "strip_from": "07:00",
+ "strip_to": "19:00",
+ "strip_note": "2h 00m booked",
+ "now": {
+  "lead": "Tomorrow",
+  "time": "08:00",
+  "title": "Flight to Austin",
+  "where": "",
+  "len": "3h",
+  "join": "",
+  "join_ask": "",
+  "faces": []
+ },
+ "rail": [
+  {
+   "id": "2",
+   "time": "all day",
+   "title": "Mike surgery",
+   "tint": "orange",
+   "free": "",
+   "what": "",
+   "done": "1",
+   "live": "",
+   "last": "",
+   "leave": "",
+   "tight": ""
+  },
+  {
+   "id": "1",
+   "time": "08:00",
+   "title": "Engineering Product Meeting",
+   "tint": "blue",
+   "free": "",
+   "what": "",
+   "done": "1",
+   "live": "",
+   "last": "",
+   "leave": "",
+   "tight": ""
+  },
+  {
+   "id": "3",
+   "time": "10:00",
+   "title": "Weekly Sales Meeting",
+   "tint": "blue",
+   "free": "",
+   "what": "",
+   "done": "1",
+   "live": "",
+   "last": "1",
+   "leave": "",
+   "tight": ""
+  }
+ ],
+ "rail_note": "3 today",
  "suggestions": [
   {
    "id": "s0",
-   "text": "What's on this week?"
+   "text": "What should I do first?"
+  },
+  {
+   "id": "sl",
+   "text": "What's late and why?"
   }
  ],
- "keys": [
-  {
-   "id": "k3",
-   "key": "/",
-   "does": "ask"
-  }
- ]
+ "zero": "1",
+ "later_note": "2 back tomorrow"
 }
