@@ -199,9 +199,9 @@
      "icon": "sparkles",
      "tint": "teal",
      "what": "Amex is running hot",
-     "when": "19:52",
+     "when": "19:56",
      "late": "",
-     "route": "/feed?selected=f1",
+     "route": "/feed?selectedId=f1",
      "dim": "",
      "iid": "nf1",
      "last": ""
@@ -255,6 +255,10 @@
    "icon": "checklist",
    "note": "1 item",
    "count": "1",
+   "real": "1",
+   "sweeping": "",
+   "sweep_note": "Too broad to sweep — name one project or person. Rename it to one person, project or trip.",
+   "found": [],
    "rows": [
     {
      "id": "s2-tr2",
@@ -279,6 +283,29 @@
    "icon": "checklist",
    "note": "4 items",
    "count": "4",
+   "real": "1",
+   "sweeping": "",
+   "sweep_note": "Found 2 things that may belong.",
+   "found": [
+    {
+     "id": "s1-0",
+     "key": "knowledge:k1",
+     "what": "Austin conference notes",
+     "source": "Knowledge",
+     "icon": "brain",
+     "route": "/knowledge?selectedId=k1",
+     "why": "notes for the same trip"
+    },
+    {
+     "id": "s1-1",
+     "key": "mail:m77",
+     "what": "Maya Chen — Austin — hotel confirmation",
+     "source": "Mail",
+     "icon": "envelope",
+     "route": "/inbox?selectedId=m77",
+     "why": "the hotel for it"
+    }
+   ],
    "rows": [
     {
      "id": "s1-mm1",

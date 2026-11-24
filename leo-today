@@ -618,6 +618,7 @@ _regen_lock = threading.Lock()
 ASK_DIR = os.path.join(DATA, "ask")
 FIX_DIR = os.path.join(DATA, "fixes")
 _asking = set()
+_sweeping = set()
 _ask_lock = threading.Lock()
 
 ASK_SYSTEM = """You answer one question about one person's day, inside their
@@ -827,6 +828,146 @@ def apply_places(user, places, allowed):
     return names
 
 
+def edit_subjects(user, fn):
+    """Change the record under the lock; `fn` gets the list of subjects."""
+    with _regen_lock:
+        st = load_subjects(user)
+        out = fn(st["subjects"])
+        json.dump(st, open(subjects_path(user), "w"))
+    return out
+
+
+# ---------------------------------------------------------------------------
+# The sweep
+# ---------------------------------------------------------------------------
+# A subject can go looking. It plans a few searches from its own title and
+# contents, runs them across everything the hub can search, and a second pass
+# judges — strictly — which results belong. What it finds is OFFERED, never
+# filed: the person keeps or dismisses each one.
+#
+# It only works when the subject is specific. "Alumawood cover" is a search;
+# "Work" is everything. So the first thing the plan says is whether to try.
+
+SWEEP_PLAN = """A person keeps a subject — a small pile of related things — and wants
+the rest of their system searched for anything else that belongs in it.
+
+Given the subject's title and what is already in it, answer ONLY with JSON:
+
+{"specific": true, "why": "", "queries": ["...", "..."]}
+
+- specific: is this one particular thing — a person, a project, a trip, a
+  purchase, an event — that a search could actually find more of? "Work",
+  "Family", "Around the house", "Money" are NOT: they are parts of life, and
+  a search for them returns everything. If not, set false and say in `why`,
+  in ten words, what would make it specific. Give no queries.
+- queries: two to four searches. They are matched as WORDS, not as questions,
+  so each is one to three distinctive words — a name, a product, a place.
+  Different angles, not rewordings.
+"""
+
+SWEEP_JUDGE = """A person keeps a subject and a search has turned up candidates. Decide
+which of them genuinely belong to it.
+
+Answer ONLY with JSON: {"keep": [{"key": "...", "why": "..."}]}
+
+Be strict. A candidate belongs only if the person, reading the subject, would
+say "yes, that is part of this" — the same project, the same trip, the same
+person about the same matter. Sharing a word is not belonging. Most
+candidates do not belong, and an empty list is a good answer. At most five.
+`why` is ten words at most on what ties it to the subject.
+"""
+
+
+def sweep(user, sid, act):
+    """Run one subject's sweep and file what it offers. OFF the request path."""
+    def note(text, found=None):
+        def fn(subs):
+            for x in subs:
+                if x["sid"] == sid:
+                    x["sweep"] = {"note": text, "at": datetime.now().isoformat(timespec="minutes")}
+                    if found is not None:
+                        x["found"] = found
+        edit_subjects(user, fn)
+
+    try:
+        me = next((x for x in load_subjects(user)["subjects"] if x["sid"] == sid), None)
+        if not me:
+            return
+        try:
+            known = json.load(open(ask_path(user, "things")))
+        except Exception:  # noqa: BLE001
+            known = {}
+        inside = [known[i] for i in me["ids"] if i in known] + [r["what"] for r in me.get("pinned") or []]
+        brief_ = f"SUBJECT: {me['title']}\nIN IT:\n" + "\n".join(f"- {t}" for t in inside[:20])
+
+        def model(system, content):
+            text = ask_claude(system, [{"role": "user", "content": content}],
+                              work="periodic_check", max_tokens=500).strip()
+            return json.loads(text[text.index("{"):text.rindex("}") + 1])
+
+        plan = model(SWEEP_PLAN, brief_)
+        queries = [str(q).strip()[:60] for q in (plan.get("queries") or []) if str(q).strip()][:4]
+        if not plan.get("specific") or not queries:
+            why = str(plan.get("why") or "").strip().rstrip(".")
+            return note("Too broad to sweep" + (f" — {why}." if why else ".")
+                        + " Rename it to one person, project or trip.")
+
+        seen = set(me.get("dismissed") or []) | {r["key"] for r in me.get("pinned") or []}
+        seen |= {f"mail:{i[1:]}" for i in me["ids"] if i.startswith("m")}
+        seen |= {f"feed:{i[1:]}" for i in me["ids"] if i.startswith("n")}
+        cands = {}
+        for q in queries:
+            try:
+                for r in (json.loads(tool("search_everything", {"query": q, "limit": 8}, act))
+                          .get("results") or []):
+                    key = f"{r.get('source')}:{r.get('id')}"
+                    if key not in seen and r.get("title"):
+                        cands.setdefault(key, {
+                            "key": key, "what": str(r["title"])[:110],
+                            "source": str(r.get("source_label") or r.get("source") or ""),
+                            "icon": str(r.get("icon") or "doc"), "route": str(r.get("route") or ""),
+                            "snippet": str(r.get("snippet") or "")[:160],
+                            "date": str(r.get("updated_at") or "")[:10]})
+            except Exception as e:  # noqa: BLE001 — one search failing is not the sweep failing
+                print(f"today: sweep search failed: {type(e).__name__}", flush=True)
+            try:
+                hits = json.loads(tool("email", {"action": "search", "query": q, "limit": 8}, act))
+                for m_ in hits if isinstance(hits, list) else (hits.get("messages") or hits.get("results") or []):
+                    key = f"mail:{m_.get('id') or m_.get('gmail_id')}"
+                    who, _addr = sender(m_.get("from"))
+                    if key not in seen and m_.get("subject"):
+                        cands.setdefault(key, {
+                            "key": key, "what": f"{who} — {m_['subject']}"[:110], "source": "Mail",
+                            "icon": "envelope", "route": f"/inbox?selectedId={key[5:]}",
+                            "snippet": str(m_.get("snippet") or "")[:160],
+                            "date": str(m_.get("date") or m_.get("received_at") or "")[:10]})
+            except Exception as e:  # noqa: BLE001
+                print(f"today: sweep mail search failed: {type(e).__name__}", flush=True)
+        if not cands:
+            return note(f"Swept {plural(len(queries), 'search', 'searches')} — nothing new.", [])
+
+        listing = "\n".join(f"{c['key']} | {c['source']} | {c['what']} | {c['snippet']} | {c['date']}"
+                            for c in list(cands.values())[:30])
+        verdict = model(SWEEP_JUDGE, brief_ + "\n\nCANDIDATES — `key | source | title | snippet | date`:\n" + listing)
+        found = []
+        for k in (verdict.get("keep") or [])[:5]:
+            c = cands.get(str(k.get("key"))) if isinstance(k, dict) else None
+            if c:
+                found.append({"key": c["key"], "what": c["what"], "source": c["source"],
+                              "icon": c["icon"], "route": c["route"],
+                              "why": str(k.get("why") or "").strip()[:90]})
+        note(f"Found {plural(len(found), 'thing')} that may belong." if found
+             else f"Swept {plural(len(queries), 'search', 'searches')}, {plural(len(cands), 'result')} — "
+                  "nothing that belongs.", found)
+    except Exception as e:  # noqa: BLE001
+        print(f"today: sweep failed: {type(e).__name__}: {e}", flush=True)
+        note(f"The sweep couldn't finish — {plainly(e) if not isinstance(e, Gap) else e}.")
+    finally:
+        with _ask_lock:
+            _sweeping.discard((user, sid))
+        nudge()
+
+
 def write_brief(user, key, context, new_ids=()):
     """Ask for the summary, and a home for what is new. OFF the request path."""
     try:
@@ -929,7 +1070,7 @@ def answer_for(user, now):
                     else f"{mins // 60}h ago" if mins < 24 * 60 else "earlier")}, ""
 
 
-def ui_action(name, args, user):
+def ui_action(name, args, user, grant=None):
     """The hub's action channel — `POST /leo/ui/action`.
 
     Three verbs, and every one of them returns at once: `ask` files the
@@ -962,6 +1103,49 @@ def ui_action(name, args, user):
         except OSError:
             pass
         return {"ok": True}
+    if name == "rename":
+        sid, title = str(args.get("id") or ""), str(args.get("title") or "").strip()[:40]
+        if not sid or not title:
+            return {"ok": False, "error": "a subject needs a name"}
+
+        def fn(subs):
+            for x in subs:
+                if x["sid"] == sid:
+                    x["title"] = title
+                    return True
+            return False
+        return {"ok": bool(edit_subjects(user, fn))}
+    if name == "sweep":
+        sid = str(args.get("id") or "")
+        if not any(x["sid"] == sid for x in load_subjects(user)["subjects"]):
+            return {"ok": False, "error": "no such subject"}
+        act = acting(grant)
+        if not act:
+            return {"ok": False, "error": "no acting credential"}
+        with _ask_lock:
+            if (user, sid) in _sweeping:
+                return {"ok": True, "busy": True}
+            _sweeping.add((user, sid))
+        threading.Thread(target=sweep, daemon=True, args=(user, sid, act)).start()
+        return {"ok": True}
+    if name in ("keep", "drop"):
+        sid, key = str(args.get("id") or ""), str(args.get("key") or "")
+
+        def fn(subs):
+            for x in subs:
+                if x["sid"] == sid:
+                    hit = next((f for f in x.get("found") or [] if f["key"] == key), None)
+                    if not hit:
+                        return False
+                    x["found"] = [f for f in x["found"] if f["key"] != key]
+                    if name == "keep":
+                        x.setdefault("pinned", []).append({k: hit[k] for k in ("key", "what", "source", "icon", "route")})
+                    else:
+                        x.setdefault("dismissed", []).append(key)
+                        x["dismissed"] = x["dismissed"][-200:]
+                    return True
+            return False
+        return {"ok": bool(edit_subjects(user, fn))}
     if name in ("done", "later", "mute"):
         iid, what = str(args.get("id") or ""), str(args.get("what") or "")[:120]
         if not iid:
@@ -1500,7 +1684,7 @@ def payload(grant=None, user=""):
               route="/logs")
     for n in nts:
         thing(f"n{n['id']}", "note", "sparkles", "teal", n["title"], n["when"],
-              route=f"/feed?selected={n['id']}")
+              route=f"/feed?selectedId={n['id']}")
     for w in got.get("whereis") or []:
         if w.get("uid") != user:      # nobody needs telling where THEY are
             thing(item_key("people", w["what"]), "people", "location", "green", w["what"], w["detail"])
@@ -1574,14 +1758,24 @@ def payload(grant=None, user=""):
     except Exception as e:  # noqa: BLE001 — Ask degrades, the page does not
         print(f"today: could not file the context: {type(e).__name__}", flush=True)
 
+    try:
+        json.dump({x["id"]: x["what"] for x in things}, open(ask_path(user, "things"), "w"))
+    except Exception:  # noqa: BLE001 — the sweep reads this; the page does not
+        pass
     held = organised(user, bool(things), digest_of(steady, evs), ctx, now,
                      [x["id"] for x in fresh])
 
     # ---- subjects: read from the record, in the record's order -------------
     states = (held or {}).get("states") or {}
     subjects_ = []
+    with _ask_lock:
+        running = {sid_ for (u_, sid_) in _sweeping if u_ == user}
     for sub_ in record["subjects"]:
         members = [by_id[i] for i in sub_["ids"] if i in by_id]
+        # What a sweep found and the person KEPT: part of the subject now.
+        members += [{"id": r["key"], "kind": "pinned", "icon": r["icon"], "tint": "gray",
+                     "what": r["what"], "when": r["source"], "late": "", "route": r["route"], "dim": ""}
+                    for r in sub_.get("pinned") or [] if r["key"] not in hidden]
         if members:
             kinds = [x["kind"] for x in members]
             lead_ = max(set(kinds), key=kinds.count)
@@ -1589,6 +1783,11 @@ def payload(grant=None, user=""):
                               "state": states.get(sub_["sid"], ""),
                               "tint": hue(sub_["sid"]), "icon": SUBJECT_ICON.get(lead_, "square.stack"),
                               "note": plural(len(members), "item"), "count": str(len(members)),
+                              "real": "1", "sweeping": "1" if sub_["sid"] in running else "",
+                              "sweep_note": "" if sub_["sid"] in running
+                                            else (sub_.get("sweep") or {}).get("note", ""),
+                              "found": [dict(f, id=f"{sub_['sid']}-{n}") for n, f in
+                                        enumerate(sub_.get("found") or [])],
                               "rows": members})
     if fresh:
         # Not yet placed. On top, under one fixed name, until the model files it.
@@ -1761,7 +1960,7 @@ class Handler(BaseHTTPRequestHandler):
         user = self.headers.get("x-leo-user-id") or ""
         print(f"today: action {name!r} args={sorted(args)} user={user or '-'}", flush=True)
         try:
-            out = ui_action(name, args, user)
+            out = ui_action(name, args, user, self.headers.get("x-leo-acting-grant"))
         except Exception as e:  # noqa: BLE001 — an action never takes the page down
             print(f"today: action {name!r} failed: {type(e).__name__}: {e}", flush=True)
             out = {"ok": False, "error": type(e).__name__}

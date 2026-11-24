@@ -91,6 +91,15 @@ descriptor = {
                 "mute": {"kind": "packageAction", "name": "mute",
                          "args": {"id": "{args.id}", "what": "{args.what}"}, "refresh": "reload"},
                 "undo": {"kind": "packageAction", "name": "undo", "refresh": "reload"},
+                # A subject: its name is the person's, and it can go looking.
+                "rename": {"kind": "packageAction", "name": "rename",
+                           "args": {"id": "{args.id}", "title": "{args.title}"}, "refresh": "reload"},
+                "sweep": {"kind": "packageAction", "name": "sweep",
+                          "args": {"id": "{args.id}"}, "refresh": "reload"},
+                "keep": {"kind": "packageAction", "name": "keep",
+                         "args": {"id": "{args.id}", "key": "{args.key}"}, "refresh": "reload"},
+                "drop": {"kind": "packageAction", "name": "drop",
+                         "args": {"id": "{args.id}", "key": "{args.key}"}, "refresh": "reload"},
                 # A row opens the thing itself, in the app that owns it. The
                 # route is the row's own — `/inbox?selectedId=…`,
                 # `/calendar?day=…` — handed over whole by the press.

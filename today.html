@@ -38,6 +38,9 @@
     </li>
   </template>
 
+  <!-- A subject. Its name is the person's to change; and it can go looking —
+       a sweep searches everything the hub can search for what else belongs
+       here, and OFFERS what it finds. Nothing is filed without a press. -->
   <template name="subject">
     <article id="sub-{s.id}" tint="{s.tint}" class="flex flex-col rounded-xl bg-surface overflow-hidden">
       <div class="flex items-start gap-3 px-4 pt-4 pb-2">
@@ -46,13 +49,55 @@
         </span>
         <div class="flex flex-col gap-0.5 min-w-0 flex-1">
           <h3 class="text-base font-semibold truncate">{s.title}</h3>
-          <span class="text-xs text-secondary line-clamp-2">{s.state}</span>
+          <span if="s.state" class="text-xs text-secondary line-clamp-2">{s.state}</span>
         </div>
-        <span class="shrink-0 pt-1 text-xs text-muted tabular-nums">{s.note}</span>
+        <div if="s.real" class="flex items-center shrink-0 -mr-2">
+          <span if="s.sweeping" class="px-2 text-xs text-secondary animate-pulse">Sweeping…</span>
+          <a if="!s.sweeping" id="sweep-{s.id}" action="sweep" args="id={s.id}"
+             aria-label="Sweep for anything else that belongs in {s.title}"
+             class="flex items-center gap-1.5 min-h-8 px-2 rounded-full text-xs font-medium text-secondary">
+            <img icon="sparkle.magnifyingglass" alt="" class="size-3.5">
+            <span>Sweep</span>
+          </a>
+          <a id="edit-{s.id}" select="edit={s.id}" aria-label="Rename {s.title}"
+             class="size-8 flex items-center justify-center rounded-full">
+            <img icon="pencil" alt="" class="size-3.5 text-muted">
+          </a>
+        </div>
+        <span if="!s.real" class="shrink-0 pt-1 text-xs text-muted tabular-nums">{s.note}</span>
       </div>
+
+      <form if="$.edit == {s.id}" id="rename-{s.id}" action="rename" args="id={s.id} title={$.form.title}"
+            class="flex items-center gap-2 px-4 pb-3">
+        <input id="rename-field-{s.id}" bind="form.title" value="{s.title}" required autofocus
+               placeholder="Name this subject" class="flex-1 max-w-sm h-9 min-w-0">
+        <button id="rename-save-{s.id}" action="rename" args="id={s.id} title={$.form.title}"
+                class="shrink-0 h-9 px-3 rounded-lg bg-accent text-on-accent">Rename</button>
+        <a id="rename-close-{s.id}" select="edit=" shortcut="esc"
+           class="shrink-0 min-h-9 px-2 flex items-center rounded-lg text-xs font-medium text-secondary">Close</a>
+      </form>
+
       <ul class="flex flex-col pb-1">
         <use template="piece" each="r in s.rows"></use>
       </ul>
+
+      <div if="s.found" id="found-{s.id}" class="flex flex-col pb-2 border-t">
+        <span class="px-4 pt-3 pb-1 text-xs font-semibold text-secondary uppercase">Found by the sweep</span>
+        <div each="f in s.found" id="f-{f.id}" class="flex items-center gap-3 min-h-12 px-4">
+          <img icon="{f.icon}" alt="" class="size-4 shrink-0 text-muted">
+          <a id="f-open-{f.id}" action="open" args="route={f.route}" class="flex flex-col gap-0.5 flex-1 min-w-0 py-1.5">
+            <span class="text-sm truncate">{f.what}</span>
+            <span class="text-xs text-muted truncate">{f.source} · {f.why}</span>
+          </a>
+          <a id="f-keep-{f.id}" action="keep" args="id={s.id} key={f.key}"
+             class="shrink-0 min-h-8 px-3 flex items-center rounded-full text-xs font-medium bg-elevated">Keep</a>
+          <a id="f-drop-{f.id}" action="drop" args="id={s.id} key={f.key}" aria-label="Not part of this"
+             class="shrink-0 size-8 flex items-center justify-center rounded-full">
+            <img icon="xmark" alt="" class="size-3.5 text-muted">
+          </a>
+        </div>
+      </div>
+      <span if="s.sweep_note" class="px-4 pb-3 text-xs text-muted line-clamp-2">{s.sweep_note}</span>
     </article>
   </template>
 

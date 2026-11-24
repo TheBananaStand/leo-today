@@ -149,6 +149,63 @@ print("stable       : same subjects, same order, same colours, same rows — one
 INBOX.pop()
 d = m.payload("grant", "selftest")
 
+# --- rename, and the sweep ----------------------------------------------------
+sid = austin["id"]
+assert m.ui_action("rename", {"id": sid, "title": ""}, "selftest")["ok"] is False, "an empty name must refuse"
+assert m.ui_action("rename", {"id": sid, "title": "Austin, Thursday"}, "selftest")["ok"]
+d = m.payload("grant", "selftest")
+renamed = next(x for x in d["subjects"] if x["id"] == sid)
+assert renamed["title"] == "Austin, Thursday" and renamed["tint"] == austin["tint"], "a rename must not recolour or move"
+assert [x["id"] for x in d["subjects"] if x["id"] != "new"] == [x[0] for x in after], "a rename reordered the page"
+
+BASE_TOOL = m.tool
+def run_sweep(plan, verdict, results):
+    m.ask_claude = lambda system, turns, **k: json.dumps(
+        plan if system is m.SWEEP_PLAN else verdict if system is m.SWEEP_JUDGE
+        else {"focus": ["f"], "next": [], "place": [], "states": {}})
+    m.tool = lambda name, args, tok: (
+        json.dumps({"results": results}) if name == "search_everything" else
+        json.dumps([{"id": "m77", "from": "Maya Chen <maya@acme.com>", "subject": "Austin — hotel confirmation"}])
+        if name == "email" and args.get("action") == "search" else BASE_TOOL(name, args, tok))
+    assert m.ui_action("sweep", {"id": sid}, "selftest", "grant")["ok"]
+    for _ in range(100):
+        d = m.payload("grant", "selftest")
+        me = next(x for x in d["subjects"] if x["id"] == sid)
+        if me["sweep_note"]:
+            return me
+        time.sleep(0.05)
+    raise AssertionError("the sweep never reported")
+
+RES = [{"id": "k1", "source": "knowledge", "source_label": "Knowledge", "title": "Austin conference notes",
+        "route": "/knowledge?selectedId=k1", "icon": "brain", "snippet": "", "updated_at": "2026-11-20T00:00"},
+       {"id": "f9", "source": "feed", "source_label": "Feed", "title": "Finances clear",
+        "route": "/feed?selectedId=f9", "icon": "square.stack.3d.up", "snippet": "", "updated_at": "2026-11-05T00:00"}]
+me = run_sweep({"specific": True, "why": "", "queries": ["Austin", "Maya Chen"]},
+               {"keep": [{"key": "knowledge:k1", "why": "notes for the same trip"},
+                         {"key": "mail:m77", "why": "the hotel for it"},
+                         {"key": "made:up", "why": "invented"}]}, RES)
+keys = [f["key"] for f in me["found"]]
+assert keys == ["knowledge:k1", "mail:m77"], f"found must be exactly what was judged to belong, and real: {keys}"
+assert me["found"][1]["route"] == "/inbox?selectedId=m77"
+assert len(me["rows"]) == len(renamed["rows"]), "a sweep OFFERS; it must not file anything by itself"
+assert m.ui_action("keep", {"id": sid, "key": "knowledge:k1"}, "selftest")["ok"]
+assert m.ui_action("drop", {"id": sid, "key": "mail:m77"}, "selftest")["ok"]
+me = next(x for x in m.payload("grant", "selftest")["subjects"] if x["id"] == sid)
+assert any(r["iid"] == "knowledge:k1" for r in me["rows"]) and not me["found"], "keep files it; drop removes the offer"
+me = run_sweep({"specific": True, "why": "", "queries": ["Austin"]},
+               {"keep": [{"key": "mail:m77", "why": "x"}, {"key": "knowledge:k1", "why": "x"}]}, RES)
+assert not me["found"], "a dismissed or kept result must never be offered again"
+os.rename(m.subjects_path("selftest"), m.subjects_path("selftest") + ".bak")
+json.dump({"seq": 50, "subjects": [{"sid": "s50", "title": "Work", "ids": ["tr1"]}]}, open(m.subjects_path("selftest"), "w"))
+sid_keep, sid = sid, "s50"
+me = run_sweep({"specific": False, "why": "name one project or person", "queries": []}, {"keep": []}, RES)
+assert me["sweep_note"].startswith("Too broad to sweep") and not me["found"], me["sweep_note"]
+os.replace(m.subjects_path("selftest") + ".bak", m.subjects_path("selftest")); sid = sid_keep
+print("rename       : keeps its colour and its place")
+print("sweep        : offers only what was judged to belong; keep files, drop forgets; 'Work' is refused")
+m.ask_claude = lambda *a, **k: json.dumps({"focus": ["f"], "next": [], "place": [], "states": {}})
+d = m.payload("grant", "selftest")
+
 # --- the verbs: done, later, not for me, undo -------------------------------
 shown = lambda d: [r["iid"] for sub in d.get("subjects", []) for r in sub["rows"]]  # noqa: E731
 n = len(shown(d))
