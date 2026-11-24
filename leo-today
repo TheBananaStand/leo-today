@@ -96,6 +96,22 @@ class Gap(Exception):
     """A source did not answer. Carries a sentence a person can read."""
 
 
+# A Python exception class is not a sentence. These are the ones that reach
+# the footer, which draws one line of 12pt muted text per source.
+PLAIN = {"TimeoutError": "it took too long to answer",
+         "URLError": "nothing answered on that address",
+         "ConnectionResetError": "the connection dropped",
+         "ConnectionRefusedError": "nothing is listening there",
+         "JSONDecodeError": "it answered something that was not JSON",
+         "ValueError": "it answered something unreadable",
+         "KeyError": "its answer was missing a field"}
+
+
+def plainly(e):
+    """What went wrong, in words a person reads rather than catches."""
+    return PLAIN.get(type(e).__name__, "it could not be reached")
+
+
 def scope_reason(e):
     """The 403 said WHY in a JSON envelope. Say that, not the envelope.
 
@@ -153,7 +169,7 @@ def graph(path, token=None, **params):
     except TimeoutError:
         raise Gap(f"it timed out after {TIMEOUT:g}s") from None
     except Exception as e:  # noqa: BLE001 — a source never takes the page down
-        raise Gap(f"{type(e).__name__}: {e}") from None
+        raise Gap(plainly(e)) from None
 
 
 def tool(name, args, token):
@@ -170,9 +186,9 @@ def tool(name, args, token):
         out = _call("/graph/v1/tools/invoke", token,
                     data={"name": name, "arguments": args, "destination": "hub"})
     except urllib.error.HTTPError as e:
-        raise Gap(f"the hub refused `{name}` ({e.code})") from None
+        raise Gap(f"the hub refused the {name} tool ({e.code})") from None
     except Exception as e:  # noqa: BLE001
-        raise Gap(f"`{name}`: {type(e).__name__}") from None
+        raise Gap(plainly(e)) from None
     if out.get("is_error"):
         body = str(out.get("output") or "")
         # The tool's own prose is the discriminator, and it is worth keeping:
@@ -183,7 +199,7 @@ def tool(name, args, token):
             raise Gap("Home Assistant refused the credential — its token may have expired")
         if body.startswith("Home Assistant error"):
             raise Gap("Home Assistant answered with an error")
-        raise Gap(f"`{name}` answered with an error")
+        raise Gap(f"the {name} tool answered with an error")
     return out.get("output") or ""
 
 
