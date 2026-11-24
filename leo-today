@@ -1478,6 +1478,7 @@ def payload(grant=None, user=""):
                       "done": "1" if e["at"] + timedelta(minutes=e["mins"]) < now else "",
                       "live": "1" if (not e["allday"] and e["at"] <= now
                                       <= e["at"] + timedelta(minutes=e["mins"])) else "",
+                      "first": "1" if i == 0 else "",
                       "last": "1" if i == len(today[:SHOWN]) - 1 else "",
                       "leave": "", "tight": tight_note(today, i) if e["at"] > now else ""}
                      for i, e in enumerate(today[:SHOWN])]

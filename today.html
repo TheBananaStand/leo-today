@@ -59,7 +59,12 @@
   <template name="moment">
     <li id="m-{m.id}" class="flex gap-3">
       <span class="w-12 shrink-0 pt-0.5 text-right text-xs text-muted tabular-nums">{m.time}</span>
+      <!-- The dot sits on the centre of the row's first line of text, not at
+           the row's top edge: a 6pt lead-in above it — a piece of the spine
+           on every row but the first — puts its middle on the text's. -->
       <div class="flex flex-col items-center shrink-0 w-3">
+        <span if="m.first" class="h-1.5"></span>
+        <span if="!m.first" class="h-1.5 border-l border-muted"></span>
         <span if="!m.free" tint="{m.tint}" class="size-2.5 rounded-full bg-tint"></span>
         <span if="m.free" class="size-2.5 rounded-full border-2 border-muted"></span>
         <!-- `bg-elevated` is one step off `bg-surface` and vanishes entirely

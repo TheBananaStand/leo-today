@@ -65,6 +65,7 @@
    "what": "",
    "done": "1",
    "live": "",
+   "first": "1",
    "last": "",
    "leave": "",
    "tight": ""
@@ -78,6 +79,7 @@
    "what": "",
    "done": "1",
    "live": "",
+   "first": "",
    "last": "",
    "leave": "",
    "tight": ""
@@ -91,6 +93,7 @@
    "what": "",
    "done": "1",
    "live": "",
+   "first": "",
    "last": "1",
    "leave": "",
    "tight": ""
@@ -283,7 +286,7 @@
      "icon": "sparkles",
      "tint": "teal",
      "what": "Amex is running hot",
-     "when": "19:41",
+     "when": "19:47",
      "late": "",
      "route": "/feed?selected=f1",
      "dim": "",
