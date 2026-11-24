@@ -137,7 +137,18 @@ routes = {r["iid"]: r["route"] for sub in subs for r in sub["rows"]}
 assert routes["mm1"] == "/inbox?selectedId=m1" and routes["e4"].startswith("/calendar?day=") and routes["tr1"] == "/reminders"
 assert all(sub["rows"][-1]["last"] == "1" for sub in subs)
 assert not d.get("gaps_line"), "every stubbed source should have answered"
-assert d["rail"] and d["now"]["title"] == "Flight to Austin" and d["rail"][0]["first"] == "1"
+# `now` is whichever timed event is next from the REAL clock, so a hardcoded
+# title made this assertion true only between ~09:00 and midnight: run it at
+# 02:10 and today's 08:00 "Engineering Product Meeting" is genuinely next,
+# not tomorrow's flight. It failed for that reason on 2026-11-24 and the
+# failure text named no hour, so it read as a regression in `payload`.
+# Assert the PROPERTY — now is the next timed event — instead of the hour the
+# test was written in.
+_timed = sorted((e for e in CAL["events"] if e.get("end")), key=lambda e: e["start"])
+_next = next((e["title"] for e in _timed if e["start"] > now.isoformat()), None)
+assert _next, "the fixture has no event ahead of the clock, so `now` is untestable"
+assert d["rail"] and d["now"]["title"] == _next and d["rail"][0]["first"] == "1", (
+    f'now={d["now"]["title"]!r}, expected {_next!r} at {now:%H:%M}')
 assert m._scene.split("-")[1] == ("day" if 7 <= now.hour < 18 else "night"), m._scene
 
 # Mail is never drawn before it is judged: a message that has just arrived
@@ -252,11 +263,38 @@ me = run_sweep({"specific": True, "why": "", "queries": ["Austin"]},
                {"keep": [{"key": "mail:m77", "why": "x"}, {"key": "knowledge:k1", "why": "x"}]}, RES)
 assert not me["found"], "a dismissed or kept result must never be offered again"
 os.rename(m.subjects_path("selftest"), m.subjects_path("selftest") + ".bak")
-json.dump({"seq": 50, "subjects": [{"sid": "s50", "title": "Work", "ids": ["tr1"]}]}, open(m.subjects_path("selftest"), "w"))
+# Carries the CURRENT spec: this case is about the sweep, and a record with
+# no spec is a migration case that load_subjects correctly empties.
+json.dump({"seq": 50, "spec": m.SUBJECT_SPEC,
+           "subjects": [{"sid": "s50", "title": "Work", "ids": ["tr1"]}]},
+          open(m.subjects_path("selftest"), "w"))
 sid_keep, sid = sid, "s50"
 me = run_sweep({"specific": False, "why": "name one project or person", "queries": []}, {"keep": []}, RES)
 assert me["sweep_note"].startswith("Too broad to sweep") and not me["found"], me["sweep_note"]
 os.replace(m.subjects_path("selftest") + ".bak", m.subjects_path("selftest")); sid = sid_keep
+
+# A record grouped under the OLD spec is re-derived once, and only once.
+# Asserted in both directions: a spec-less record loses its subjects (so the
+# person stops seeing an arrangement built to a definition they rejected),
+# and `noise`/`background`/`asked` survive (so what is marketing does not have
+# to be decided again). Without the second half the migration would be a
+# regroup wearing a migration's clothes.
+_bak = m.subjects_path("selftest") + ".mig"
+os.rename(m.subjects_path("selftest"), _bak)
+json.dump({"seq": 7, "subjects": [{"sid": "s7", "title": "Auto loan past due", "ids": ["x1"]}],
+           "noise": ["n1"], "background": ["b1"], "asked": {"a1": 2}},
+          open(m.subjects_path("selftest"), "w"))
+_mig = m.load_subjects("selftest")
+assert _mig["subjects"] == [], "a record under the old spec must be re-derived, not frozen"
+assert _mig["noise"] == ["n1"] and _mig["background"] == ["b1"] and _mig["asked"] == {"a1": 2}, \
+    "the migration must keep what grouping does not decide"
+assert _mig["spec"] == m.SUBJECT_SPEC
+json.dump({"seq": 7, "spec": m.SUBJECT_SPEC,
+           "subjects": [{"sid": "s7", "title": "Money", "ids": ["x1"]}]},
+          open(m.subjects_path("selftest"), "w"))
+assert len(m.load_subjects("selftest")["subjects"]) == 1, "a current record must NOT be re-derived"
+os.replace(_bak, m.subjects_path("selftest"))
+print("migration   : old spec re-derived once; current spec untouched")
 print("rename       : keeps its colour and its place")
 print("sweep        : offers only what was judged to belong; keep files, drop forgets; 'Work' is refused")
 m.ask_claude = lambda *a, **k: json.dumps({"focus": ["f"], "next": [], "place": [], "states": {}})

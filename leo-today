@@ -626,11 +626,15 @@ ORGANISE_SYSTEM = """You keep one person's day in order, inside their own assist
 they never have to open their mail, calendar, reminders and the rest to know
 where they stand. Think the way THEY hold their life in their head.
 
-A person does not carry categories. Nobody thinks "Work: 6 items". They carry
-OPEN LOOPS — small stories in motion: someone they care about going through
-something, a project under way, a bill that is late, a release that is
-broken, a package on its way, a call tomorrow. Each is about one specific
-thing, has a state, and has a next move that is somebody's.
+A person carries WORLDS — the few standing parts of their life that everything
+arriving belongs to. Magic: The Gathering. Money. Health. Travel. Work. The
+house. Leo. A world is a place things land in, and it is still there next
+month when today's particular package, bill or appointment is finished.
+
+A world is NOT an event. "TCGplayer order shipped" is something that happened;
+"Magic: The Gathering" is where it happened. They do not think "I have a
+TCGplayer order" — they think "this is my Magic stuff". Ask what a thing IS TO
+THEM, not what just occurred to it.
 
 Their existing subjects are FIXED: never rename, merge, reorder or empty one,
 never move an item already in one. You decide only where NEW items go, and
@@ -645,14 +649,38 @@ Answer ONLY with JSON:
 
 place — exactly one entry for EVERY id under NEW ITEMS:
   into        an existing subject it is part of. Prefer this.
-  new         it opens a loop of its own. The title is how they would say it
-              aloud, four words at most: "Mike's surgery", "Auto loan past
-              due", "Leo Connect 1.4.0", "TCGplayer orders". NEVER a category
-              or a source ("Work", "Family", "Email", "Bills" on its own).
-              Give the same title to new items that are one story — the bank's
-              notice, the reminder and the invoice about the same debt belong
-              together whatever app they came from. A subject of ONE item is
-              right when that item is a real thing on their mind.
+  new         it belongs to a world they have no subject for yet. The title
+              names the WORLD, three words at most, as a thing rather than an
+              event: "Magic: The Gathering", "Money", "Health", "Travel",
+              "Work", "The house". A category IS the right answer here — that
+              is how they hold it.
+
+              Two mechanical tells that you have written an event instead of a
+              world, and both mean rewrite it:
+                - a verb about something that happened: "shipped", "broken",
+                  "past due", "cancelled", "renewed", "failing".
+                - a number that names one particular thing: "1.4.0",
+                  "#2588-2", an order or invoice number.
+              "Auto loan past due" is a state, and the state line below is
+              where it goes. The world is "Money".
+
+              Ask: will this title still mean something in a month, when this
+              item is done? "Magic: The Gathering" yes. "TCGplayer order
+              shipped" no — by then it has arrived and the title is a lie.
+
+              Give the same title to everything in one world, whatever app it
+              came from and whether or not the items are about the same
+              incident: the card shop's shipping notice, the deck-builder
+              reminder and the tournament invite are all "Magic: The
+              Gathering". Put a one-off into the world it belongs to rather
+              than opening a world for it — a surgery is "Health", a flight
+              is "Travel", a broken build is "Leo".
+
+              A world with ONE item today is fine when it is genuinely a
+              standing part of their life ("Health" on a quiet week). It is
+              WRONG when it is one event you have titled as though it were a
+              place. If you cannot name the world without describing the
+              item, you have not found the world yet — widen until you can.
   to: backlog     REMINDERS ONLY, never mail: a chore or to-do that has sat for
                   weeks with no deadline biting. Not a story; a pile.
   to: background  true but not on their mind: a routine meeting, a receipt
@@ -799,6 +827,20 @@ def subjects_path(user):
     return os.path.join(SUBJ_DIR, f"{safe_user(user)}.json")
 
 
+# What the subjects in a record were grouped BY. Bump this only when the
+# meaning of a subject changes, never when the wording is tuned — it costs the
+# person their whole arrangement once.
+#
+#   loops-1   a subject was an OPEN LOOP: one story in motion, titled as the
+#             event ("Auto loan past due", "TCGplayer order shipped"). It read
+#             as a to-do list, and seven of ten subjects held a single item —
+#             an item wearing a subject's clothes.
+#   worlds-1  a subject is a WORLD: the standing part of their life a thing
+#             belongs to ("Money", "Magic: The Gathering"). The event moved to
+#             the state line and to FOCUS, where it already read well.
+SUBJECT_SPEC = "worlds-1"
+
+
 def load_subjects(user):
     """The person's subjects, in the order they were made. THE STABLE THING.
 
@@ -808,15 +850,36 @@ def load_subjects(user):
     keep your place on is worse than five apps. So this is a record, not a
     cache: a subject keeps its id, title and position, an item stays where it
     was put, and the model is only ever asked about what is new.
+
+    **One exception, and it is a property rather than a thing to remember.**
+    A record grouped under an older [`SUBJECT_SPEC`] was built to a definition
+    of "subject" that no longer holds, so freezing it would keep the old
+    answer forever — the stability rule protecting the very arrangement the
+    person asked to be rid of. When the stored spec differs, the subjects are
+    dropped ONCE and re-derived under the new one; `noise`, `background` and
+    `asked` survive, because what is marketing does not depend on how the
+    rest is grouped and re-asking would spend the model on settled questions.
+
+    This is a migration, not a regroup: it happens on a spec change, never on
+    a data change, and the next pass writes the new spec so it cannot repeat.
     """
     try:
         st = json.load(open(subjects_path(user)))
         subs = [x for x in st.get("subjects") or [] if x.get("sid") and x.get("title")]
+        was = st.get("spec") or "loops-1"
+        if was != SUBJECT_SPEC:
+            # Loud, because this is the one path that discards an arrangement
+            # the person may have been reading for weeks. A silent migration
+            # and a silent bug leave the same trace.
+            print(f"today: re-deriving {len(subs)} subject(s) for {user} — "
+                  f"grouped under {was}, now {SUBJECT_SPEC}", flush=True)
+            subs = []
         return {"seq": int(st.get("seq") or len(subs)), "subjects": subs,
                 "noise": list(st.get("noise") or []), "background": list(st.get("background") or []),
-                "asked": dict(st.get("asked") or {})}
+                "asked": dict(st.get("asked") or {}), "spec": SUBJECT_SPEC}
     except Exception:  # noqa: BLE001 — nothing grouped yet
-        return {"seq": 0, "subjects": [], "noise": [], "background": [], "asked": {}}
+        return {"seq": 0, "subjects": [], "noise": [], "background": [], "asked": {},
+                "spec": SUBJECT_SPEC}
 
 
 def apply_places(user, places, allowed):
